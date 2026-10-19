@@ -15,25 +15,53 @@ export default function AdminDashboard() {
   const [contentUrdu, setContentUrdu] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
   const [articles, setArticles] = useState<any[]>([])
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   useEffect(() => { fetchArticles() }, [])
 
   async function fetchArticles() {
-    const { data } = await supabase.from('articles').select('*').order('id', { ascending: false })
+    const { data } = await supabase.from('articles').select('*').order('created_at', { ascending: false })
     if (data) setArticles(data)
   }
 
-  async function publishNews() {
-    setStatusMsg('Publishing...')
-    const { error } = await supabase.from('articles').insert([{ title, content, title_urdu: titleUrdu, content_urdu: contentUrdu }])
-    if (error) setStatusMsg('Failed to publish.')
-    else {
-      setStatusMsg('Successfully Published!')
-      setTitle(''); setContent(''); setTitleUrdu(''); setContentUrdu(''); fetchArticles()
+  async function handleSaveNews() {
+    setStatusMsg('Saving...')
+    const payload = { title, content, title_urdu: titleUrdu, content_urdu: contentUrdu }
+    
+    let error;
+    if (editingId) {
+      const { error: updateError } = await supabase.from('articles').update(payload).eq('id', editingId)
+      error = updateError
+    } else {
+      const { error: insertError } = await supabase.from('articles').insert([payload])
+      error = insertError
+    }
+
+    if (error) {
+      setStatusMsg('Failed to save.')
+    } else {
+      setStatusMsg(editingId ? 'Successfully Updated!' : 'Successfully Published!')
+      resetForm()
+      fetchArticles()
     }
   }
 
+  function handleEdit(art: any) {
+    setEditingId(art.id)
+    setTitle(art.title || '')
+    setContent(art.content || '')
+    setTitleUrdu(art.title_urdu || '')
+    setContentUrdu(art.content_urdu || '')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function resetForm() {
+    setEditingId(null)
+    setTitle(''); setContent(''); setTitleUrdu(''); setContentUrdu('')
+  }
+
   async function deleteArticle(id: number) {
+    if (!confirm('Are you sure you want to delete this article?')) return
     await supabase.from('articles').delete().eq('id', id); fetchArticles()
   }
 
@@ -49,9 +77,12 @@ export default function AdminDashboard() {
       </div>
 
       <div className="flex-1 p-12 ml-64 max-w-5xl">
-        <header className="mb-12 border-b border-gray-100 pb-6">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Publish Legal News</h1>
-          <p className="text-gray-500 mt-2 text-lg">Write once, publish in English and Urdu simultaneously.</p>
+        <header className="mb-12 border-b border-gray-100 pb-6 flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight text-gray-900">{editingId ? 'Edit Legal News' : 'Publish Legal News'}</h1>
+            <p className="text-gray-500 mt-2 text-lg">Write once, publish in English and Urdu simultaneously.</p>
+          </div>
+          {editingId && <button onClick={resetForm} className="text-sm font-bold text-gray-500 hover:text-gray-900 underline">Cancel Edit</button>}
         </header>
         
         <div className="mb-16">
@@ -67,8 +98,10 @@ export default function AdminDashboard() {
               <textarea placeholder="خبر کی تفصیل یہاں لکھیں..." className="w-full mb-4 p-4 bg-gray-50 border border-gray-100 rounded h-48 focus:outline-none focus:border-emerald-800 transition" value={contentUrdu} onChange={(e) => setContentUrdu(e.target.value)} />
             </div>
           </div>
-          <button onClick={publishNews} className="bg-emerald-800 text-white px-8 py-3 rounded font-bold tracking-wider hover:bg-emerald-900 transition">Publish</button>
-          {statusMsg && <p className="mt-4 font-bold text-emerald-800">{statusMsg}</p>}
+          <button onClick={handleSaveNews} className="bg-emerald-800 text-white px-8 py-3 rounded font-bold tracking-wider hover:bg-emerald-900 transition">
+            {editingId ? 'Update Article' : 'Publish'}
+          </button>
+          {statusMsg && <span className="ml-4 font-bold text-emerald-800">{statusMsg}</span>}
         </div>
 
         <div>
@@ -80,7 +113,10 @@ export default function AdminDashboard() {
                   <h4 className="font-bold text-gray-900 flex-1">{art.title}</h4>
                   <h4 className="font-bold text-gray-900 flex-1 text-right" dir="rtl">{art.title_urdu}</h4>
                 </div>
-                <button onClick={() => deleteArticle(art.id)} className="text-xs text-red-500 font-bold uppercase tracking-widest hover:text-red-700 opacity-0 group-hover:opacity-100">Delete</button>
+                <div className="flex space-x-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => handleEdit(art)} className="text-xs text-emerald-600 font-bold uppercase tracking-widest hover:text-emerald-800">Edit</button>
+                  <button onClick={() => deleteArticle(art.id)} className="text-xs text-red-500 font-bold uppercase tracking-widest hover:text-red-700">Delete</button>
+                </div>
               </div>
             ))}
           </div>

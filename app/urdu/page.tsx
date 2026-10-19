@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
@@ -33,16 +32,18 @@ export default function UrduPortal() {
         <h1 className="text-6xl font-extrabold text-gray-900 mb-6 leading-tight text-emerald-800">
           پاکستان لیگل پلیٹ فارم
         </h1>
-        <p className="text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-          پاکستان کا پہلا ڈیجیٹل قانونی مرکز جہاں آپ قوانین پڑھ سکتے ہیں اور تازہ ترین قانونی خبروں سے باخبر رہ سکتے ہیں۔
+        <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed mb-8">
+          پاکستان کا پہلا ڈیجیٹل قانونی مرکز جہاں آپ قوانین پڑھ سکتے ہیں، تازہ ترین قانونی خبروں سے باخبر رہ سکتے ہیں، اور ماہر وکلاء سے رابطہ کر سکتے ہیں۔
         </p>
+        <Link href="/lawyers" className="inline-block bg-emerald-800 text-white px-8 py-4 rounded-full font-bold hover:bg-emerald-900 transition-colors shadow-sm text-lg">
+          وکلاء کی ڈائریکٹری دیکھیں (Find an Advocate)
+        </Link>
       </div>
 
       {loading ? (
         <div className="text-center text-emerald-800 text-xl animate-pulse">ڈیٹا لوڈ ہو رہا ہے...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* Urdu News Section */}
           <div>
             <h2 className="text-4xl font-bold text-gray-900 mb-8 border-b-4 border-emerald-800 inline-block pb-2">تازہ ترین خبریں</h2>
             <div className="space-y-6">
@@ -56,7 +57,6 @@ export default function UrduPortal() {
             </div>
           </div>
 
-          {/* Urdu Laws Section */}
           <div>
             <h2 className="text-4xl font-bold text-gray-900 mb-8 border-b-4 border-emerald-800 inline-block pb-2">قوانین کی لائبریری</h2>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
