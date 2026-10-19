@@ -1,97 +1,57 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 
-// Initialize Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 )
 
-// 1. This is the main content that uses useParams()
-function ArticleContent() {
-  const params = useParams()
-  const [article, setArticle] = useState<any>(null)
+export default function EnglishNewsFeed() {
+  const [articles, setArticles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchArticle() {
-      if (!params?.id) return
-
-      try {
-        const { data, error } = await supabase
-          .from('news') 
-          .select('*')
-          .eq('id', params.id)
-          .single()
-
-        if (error) throw error
-        setArticle(data)
-      } catch (error) {
-        console.error('Error fetching article:', error)
-      } finally {
-        setLoading(false)
-      }
+    async function fetchNews() {
+      const { data, error } = await supabase.from('articles').select('*').order('created_at', { ascending: false })
+      if (!error && data) setArticles(data)
+      setLoading(false)
     }
-
-    fetchArticle()
-  }, [params?.id])
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64 text-emerald-800">
-        <svg className="animate-spin h-8 w-8" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-      </div>
-    )
-  }
-
-  if (!article) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Article not found</h2>
-        <Link href="/" className="text-emerald-600 hover:text-emerald-800 underline">
-          Return to Platform
-        </Link>
-      </div>
-    )
-  }
+    fetchNews()
+  }, [])
 
   return (
-    <article className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm">
-      <h1 className="text-4xl font-bold text-gray-900 mb-4">{article.title || 'Untitled Article'}</h1>
-      {article.created_at && (
-        <p className="text-sm text-gray-500 mb-8 border-b pb-4">
-          Published on {new Date(article.created_at).toLocaleDateString()}
-        </p>
-      )}
-      <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
-        {article.content || article.description || 'No content available.'}
+    <div className="p-8 max-w-4xl mx-auto min-h-screen">
+      <div className="mb-12 border-b border-gray-100 pb-8">
+        <h1 className="text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">Legal News & Updates</h1>
+        <p className="text-lg text-gray-500">Stay informed with the latest legal developments across Pakistan.</p>
       </div>
-    </article>
-  )
-}
 
-// 2. This is the default export that wraps the content in <Suspense> for Next.js
-export default function FullArticle() {
-  return (
-    <div className="p-8 max-w-4xl mx-auto min-h-screen bg-white">
-      <Link href="/" className="text-emerald-600 hover:text-emerald-800 mb-8 inline-block text-sm font-medium">
-        &larr; Back to Platform
-      </Link>
-      
-      <Suspense fallback={
-        <div className="flex justify-center items-center h-64 text-emerald-800 font-medium animate-pulse">
-          Loading article data...
+      {loading ? (
+        <div className="text-emerald-800 font-medium animate-pulse">Loading latest news...</div>
+      ) : (
+        <div className="space-y-8">
+          {articles.length === 0 ? (
+            <p className="text-gray-500">No articles published yet.</p>
+          ) : (
+            articles.map((article) => (
+              <article key={article.id} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition group">
+                <h2 className="text-2xl font-bold text-gray-900 mb-3 group-hover:text-emerald-800 transition-colors">
+                  {article.title}
+                </h2>
+                <p className="text-gray-600 mb-6 line-clamp-3 leading-relaxed">
+                  {article.content}
+                </p>
+                <Link href={`/article/${article.id}`} className="bg-emerald-50 text-emerald-800 px-4 py-2 rounded-full text-sm font-bold hover:bg-emerald-100 transition">
+                  Read Full Article
+                </Link>
+              </article>
+            ))
+          )}
         </div>
-      }>
-        <ArticleContent />
-      </Suspense>
+      )}
     </div>
   )
 }
