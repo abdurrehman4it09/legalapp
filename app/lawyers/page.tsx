@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
@@ -8,112 +9,70 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 )
 
-export default function PublicLawyerDirectory() {
+export default function PublicLawyersDirectory() {
   const [lawyers, setLawyers] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [cityFilter, setCityFilter] = useState('All')
 
   useEffect(() => {
-    async function getLawyers() {
-      const { data } = await supabase.from('lawyers').select('*').order('id', { ascending: false })
-      if (data) setLawyers(data)
+    async function fetchLawyers() {
+      const { data, error } = await supabase.from('lawyers').select('*').order('created_at', { ascending: false })
+      if (!error && data) setLawyers(data)
+      setLoading(false)
     }
-    getLawyers()
+    fetchLawyers()
   }, [])
 
-  const cities = ['All', ...Array.from(new Set(lawyers.map(l => l.city).filter(Boolean)))]
-
-  const filteredLawyers = lawyers.filter((l) => {
-    const q = search.toLowerCase()
-    const matchesSearch = (l.name && l.name.toLowerCase().includes(q)) ||
-                          (l.specialty && l.specialty.toLowerCase().includes(q)) ||
-                          (l.city && l.city.toLowerCase().includes(q))
-    const matchesCity = cityFilter === 'All' || l.city === cityFilter
-    return matchesSearch && matchesCity
-  })
+  const filteredLawyers = lawyers.filter(l => 
+    (l.name?.toLowerCase() || '').includes(search.toLowerCase()) || 
+    (l.specialty?.toLowerCase() || '').includes(search.toLowerCase()) ||
+    (l.location?.toLowerCase() || '').includes(search.toLowerCase())
+  )
 
   return (
-    <div dir="ltr" className="min-h-screen bg-white text-gray-900">
-      <header className="bg-white py-6 border-b border-gray-100">
-        <div className="max-w-5xl mx-auto flex justify-between items-center px-6">
-          <Link href="/" className="text-2xl font-bold tracking-tight text-gray-900 hover:text-emerald-800 transition">
-            Pakistan Legal Platform<span className="text-emerald-800">.</span>
-          </Link>
-          <div className="flex gap-6 items-center">
-            <Link href="/" className="text-gray-500 hover:text-emerald-800 font-semibold text-sm transition">News</Link>
-            <Link href="/laws" className="text-gray-500 hover:text-emerald-800 font-semibold text-sm transition">Law Library</Link>
-            <span className="text-emerald-800 font-bold border-b-2 border-emerald-800 pb-1 text-sm">Directory</span>
-            <Link href="/urdu/lawyers" className="bg-emerald-800 text-white px-5 py-2 rounded-full font-semibold text-xs hover:bg-emerald-900 transition shadow-sm">اردو</Link>
-          </div>
-        </div>
-      </header>
+    <div className="p-8 max-w-6xl mx-auto min-h-screen">
+      <div className="mb-12 text-center">
+        <h1 className="text-5xl font-extrabold text-gray-900 mb-4 tracking-tight">Advocate Directory</h1>
+        <p className="text-lg text-gray-500 max-w-2xl mx-auto">Find and connect with verified legal professionals across Pakistan.</p>
+      </div>
 
-      <main className="max-w-5xl mx-auto p-6 mt-12 mb-24">
-        <header className="mb-10 border-b border-gray-200 pb-8">
-          <h2 className="text-5xl font-bold tracking-tight mb-4 text-gray-900">Verified Advocates</h2>
-          <p className="text-gray-500 text-xl mb-6">Find and connect with top legal professionals across Pakistan.</p>
-          
-          <input 
-            type="text" 
-            placeholder="Search by advocate name, specialty, or city..." 
-            className="w-full p-4 mb-4 bg-gray-50 border border-gray-200 rounded focus:bg-white text-base outline-none focus:border-emerald-800 transition"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="mb-10 max-w-xl mx-auto">
+        <input 
+          type="text" 
+          placeholder="Search by name, specialty, or city..." 
+          className="w-full p-4 border border-gray-200 rounded-full shadow-sm focus:outline-none focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 transition"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
-          <div className="flex gap-2 flex-wrap text-xs font-bold uppercase tracking-wider">
-            {cities.map((city) => (
-              <button 
-                key={city} 
-                onClick={() => setCityFilter(city)}
-                className={`px-3 py-1.5 rounded transition ${cityFilter === city ? 'bg-emerald-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-              >
-                {city}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {filteredLawyers.length === 0 ? (
-            <p className="text-gray-500">No advocates match your search criteria.</p>
-          ) : (
-            filteredLawyers.map((lawyer: any) => (
-              <article key={lawyer.id} className="bg-white border border-gray-100 p-8 rounded-xl shadow-sm hover:shadow-md hover:border-emerald-800 transition duration-300 flex flex-col justify-between group">
-                <div>
-                  {/* NEW: Profile Picture Layout */}
-                  <div className="flex items-center gap-6 mb-6">
-                    {lawyer.image_url ? (
-                      <img src={lawyer.image_url} alt={lawyer.name} className="w-20 h-20 rounded-full object-cover border-2 border-gray-100 group-hover:border-emerald-800 transition" />
-                    ) : (
-                      <div className="w-20 h-20 rounded-full bg-gray-50 border-2 border-gray-100 flex items-center justify-center text-gray-400 font-bold text-2xl group-hover:border-emerald-800 transition">
-                        {lawyer.name ? lawyer.name.charAt(0).toUpperCase() : '?'}
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-xs font-bold text-emerald-800 tracking-widest uppercase mb-1 block">— {lawyer.specialty}</span>
-                      <h3 className="text-2xl font-bold mb-1 text-gray-900 leading-tight">{lawyer.name}</h3>
-                      <p className="text-gray-400 font-semibold text-sm">📍 {lawyer.city}</p>
-                    </div>
+      {loading ? (
+        <div className="text-center text-emerald-800 font-medium animate-pulse mt-12">Loading profiles...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {filteredLawyers.map((lawyer) => (
+            <Link href={`/lawyers/${lawyer.id}`} key={lawyer.id} className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group flex flex-col items-center text-center">
+              <div className="h-28 w-28 rounded-full bg-gray-50 mb-6 overflow-hidden border-4 border-emerald-50 group-hover:border-emerald-800 transition-colors">
+                {lawyer.image_url ? (
+                  <img src={lawyer.image_url} alt={lawyer.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-gray-300 font-bold text-4xl">
+                    {lawyer.name ? lawyer.name.charAt(0) : '?'}
                   </div>
-
-                  {lawyer.intro && (
-                    <p className="text-gray-600 leading-relaxed mb-6 text-sm border-l-2 border-emerald-100 pl-4">{lawyer.intro}</p>
-                  )}
-                </div>
-                
-                <a 
-                  href={`https://wa.me/${lawyer.phone || '923000000000'}?text=${encodeURIComponent(`Hello Advocate ${lawyer.name}, I found your profile on Pakistan Legal Platform and would like to request a consultation.`)}`} 
-                  target="_blank" rel="noopener noreferrer"
-                  className="bg-emerald-800 text-white font-bold tracking-widest uppercase text-xs px-6 py-3 rounded hover:bg-emerald-900 transition inline-flex items-center justify-center gap-2 w-full mt-2"
-                >
-                  Message on WhatsApp
-                </a>
-              </article>
-            ))
+                )}
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 group-hover:text-emerald-800 transition-colors">{lawyer.name}</h2>
+              <p className="text-emerald-800 font-medium text-sm mt-1 mb-3">{lawyer.specialty}</p>
+              <div className="w-full border-t border-gray-100 pt-4 mt-auto">
+                <span className="text-gray-500 text-sm">{lawyer.location || 'Location not specified'}</span>
+              </div>
+            </Link>
+          ))}
+          {filteredLawyers.length === 0 && (
+            <div className="col-span-3 text-center text-gray-500 py-12">No advocates found matching your search.</div>
           )}
         </div>
-      </main>
+      )}
     </div>
   )
 }
