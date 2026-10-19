@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 
 const supabase = createClient(

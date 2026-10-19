@@ -1,33 +1,39 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 
+function subscribe(callback: () => void) {
+  window.addEventListener('storage', callback)
+  return () => window.removeEventListener('storage', callback)
+}
+
+function getClientSnapshot() {
+  return localStorage.getItem('plp_admin_access') === 'granted'
+}
+
+function getServerSnapshot() {
+  return false
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const storedAuth = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot)
+  const [localAuth, setLocalAuth] = useState(false)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Check if the browser remembers we are logged in
-    const auth = localStorage.getItem('plp_admin_access')
-    if (auth === 'granted') setIsAuthenticated(true)
-    setIsLoading(false)
-  }, [])
+  const isAuthenticated = storedAuth || localAuth
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     // THE SECRET PASSCODE (You can change "admin123" to anything you want)
     if (password === 'admin123') {
       localStorage.setItem('plp_admin_access', 'granted')
-      setIsAuthenticated(true)
+      setLocalAuth(true)
     } else {
       setError('Incorrect passcode. Access denied.')
       setPassword('')
     }
   }
-
-  if (isLoading) return <div className="min-h-screen bg-gray-50"></div>
 
   // THE LOCK SCREEN
   if (!isAuthenticated) {

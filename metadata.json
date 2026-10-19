@@ -1,0 +1,8 @@
+{
+  "name": "The Daily Legal Brief",
+  "description": "Minimalist Pakistan legal journal, statute library, and verified advocate directory.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

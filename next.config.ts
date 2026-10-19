@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   // cacheComponents + partialPrefetching are companion top-level options in Next.js 16
   cacheComponents: true,
   partialPrefetching: true,
