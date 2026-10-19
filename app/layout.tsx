@@ -21,6 +21,9 @@ export default function RootLayout({
               Pakistan Legal Platform
             </Link>
             <nav className="flex items-center space-x-6 text-sm font-medium text-gray-600">
+              <Link href="/article" className="hover:text-emerald-800 transition-colors">
+                News
+              </Link>
               <Link href="/lawyers" className="hover:text-emerald-800 transition-colors">
                 Lawyers
               </Link>

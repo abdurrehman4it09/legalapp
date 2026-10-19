@@ -21,7 +21,7 @@ function UrduArticleContent() {
 
       try {
         const { data, error } = await supabase
-          .from('news') 
+          .from('articles') 
           .select('*')
           .eq('id', params.id)
           .single()
@@ -63,7 +63,7 @@ function UrduArticleContent() {
   return (
     <article className="bg-white p-8 rounded-xl border border-gray-100 shadow-sm" dir="rtl">
       <h1 className="text-4xl font-bold text-gray-900 mb-4 leading-normal">
-        {article.title_urdu || article.title || 'Untitled Article'}
+        {article.title_urdu || 'Untitled Article'}
       </h1>
       {article.created_at && (
         <p className="text-sm text-gray-500 mb-8 border-b pb-4">
@@ -71,7 +71,7 @@ function UrduArticleContent() {
         </p>
       )}
       <div className="prose max-w-none text-gray-700 whitespace-pre-wrap mt-8 text-lg leading-relaxed">
-        {article.content_urdu || article.description || 'تفصیلات دستیاب نہیں (No content available)'}
+        {article.content_urdu || 'تفصیلات دستیاب نہیں (No content available)'}
       </div>
     </article>
   )
