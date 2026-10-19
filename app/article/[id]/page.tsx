@@ -53,7 +53,7 @@ function ArticleContent() {
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Article not found</h2>
-        <Link href="/article" className="text-emerald-600 hover:text-emerald-800 underline">
+        <Link href="/" className="text-emerald-600 hover:text-emerald-800 underline">
           Return to News Feed
         </Link>
       </div>
@@ -78,8 +78,8 @@ function ArticleContent() {
 export default function FullArticle() {
   return (
     <div className="p-8 max-w-4xl mx-auto min-h-screen bg-white">
-      <Link href="/article" className="text-emerald-600 hover:text-emerald-800 mb-8 inline-block text-sm font-medium">
-        &larr; Back to News Feed
+      <Link href="/" className="text-emerald-600 hover:text-emerald-800 mb-8 inline-block text-sm font-medium">
+        ← Back to News Feed
       </Link>
       
       <Suspense fallback={

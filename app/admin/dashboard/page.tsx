@@ -21,7 +21,7 @@ export default function AdminDashboardHome() {
         const [lawsData, lawyersData, newsData] = await Promise.all([
           supabase.from('laws').select('*', { count: 'exact', head: true }),
           supabase.from('lawyers').select('*', { count: 'exact', head: true }),
-          supabase.from('news').select('*', { count: 'exact', head: true }) 
+          supabase.from('articles').select('*', { count: 'exact', head: true }) 
         ])
 
         setStats({
@@ -75,7 +75,7 @@ export default function AdminDashboardHome() {
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-emerald-800 transition-all">
             <h2 className="text-lg font-semibold text-gray-600 uppercase tracking-wider text-sm">News Updates</h2>
             <p className="text-5xl font-bold text-emerald-800 mt-2">{stats.news}</p>
-            <Link href="/admin/news" className="mt-6 inline-block text-sm text-emerald-600 hover:text-emerald-900 font-medium">
+            <Link href="/admin" className="mt-6 inline-block text-sm text-emerald-600 hover:text-emerald-900 font-medium">
               Manage Feed &rarr;
             </Link>
           </div>

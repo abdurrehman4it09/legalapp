@@ -81,7 +81,7 @@ export default function FullUrduArticle() {
   return (
     <div className="p-8 max-w-4xl mx-auto min-h-screen bg-white">
       <Link href="/urdu" className="text-emerald-600 hover:text-emerald-800 mb-8 inline-block text-sm font-medium">
-        &larr; Back to Platform
+        ← واپس جائیں
       </Link>
       
       <Suspense fallback={
