@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Daily Brief — Pakistan Digital Legal Platform (All 61 Screens)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            alabaster: '#FAF8F5',
+            ink: '#0A0A0A',
+            charcoal: '#171717',
+            deepgreen: '#043927',
+            emerald: '#064E3B',
+            accentgreen: '#059669',
+            gold: '#C5A059',
+            goldlight: '#F5EFE0',
+          },
+          fontFamily: {
+            serif: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            urdu: ['"Noto Nastaliq Urdu"', 'serif']
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { background-color: #FAF8F5; color: #0A0A0A; font-family: 'Inter', sans-serif; }
+    html.dark body { background-color: #0A0A0A; color: #FAF8F5; }
+    html[dir="rtl"] body { font-family: 'Noto Nastaliq Urdu', 'Inter', sans-serif; line-height: 2.1; }
+    .nyt-double-rule { border-top: 3px solid #0A0A0A; border-bottom: 1px solid #0A0A0A; height: 6px; }
+    html.dark .nyt-double-rule { border-top-color: #10B981; border-bottom-color: #064E3B; }
+    .drop-cap::first-letter {
+      float: left; font-family: 'Playfair Display', Georgia, serif; font-size: 4.2rem;
+      line-height: 0.82; padding: 4px 12px 0 2px; color: #043927; font-weight: 800;
+    }
+    html.dark .drop-cap::first-letter { color: #10B981; }
+    @keyframes pulseWave { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1.25); } }
+    .wave-bar { animation: pulseWave 1s ease-in-out infinite; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-deepgreen selection:text-white">
+
+  <!-- TOP 61-SCREEN CONTROLLER BAR -->
+  <div class="bg-ink text-white border-b border-emerald/60 sticky top-0 z-50 px-3 py-2 text-xs shadow-lg">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="bg-deepgreen border border-gold text-gold font-bold px-2 py-0.5 rounded uppercase">61-Screen Studio</span>
+        <span id="currentScreenBadge" class="font-semibold text-emerald-400">Screen #02: Magazine Home Page</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="screenSelector" onchange="jumpToItem(Number(this.value))" class="bg-charcoal text-white border border-emerald-700 rounded px-2.5 py-1 text-xs font-medium">
+        </select>
+        <div class="hidden md:flex items-center bg-charcoal rounded p-0.5 border border-neutral-800">
+          <button onclick="setRoleMode('guest')" id="roleBtn-guest" class="px-2 py-1 rounded bg-deepgreen text-white font-semibold">Guest</button>
+          <button onclick="setRoleMode('client')" id="roleBtn-client" class="px-2 py-1 rounded text-neutral-400 hover:text-white">Client</button>
+          <button onclick="setRoleMode('lawyer')" id="roleBtn-lawyer" class="px-2 py-1 rounded text-neutral-400 hover:text-white">Advocate CRM</button>
+          <button onclick="setRoleMode('admin')" id="roleBtn-admin" class="px-2 py-1 rounded text-neutral-400 hover:text-white">Admin CMS</button>
+        </div>
+        <button onclick="openOverlay(3)" class="bg-charcoal hover:bg-neutral-800 border border-neutral-700 px-2.5 py-1 rounded">🔍 Search (#03)</button>
+        <button onclick="toggleLanguage()" class="bg-deepgreen hover:bg-emerald border border-gold/60 text-gold font-bold px-2.5 py-1 rounded">EN / اردو</button>
+        <button onclick="openOverlay(60)" class="bg-charcoal hover:bg-neutral-800 border border-neutral-700 px-2 py-1 rounded">🌓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NYT & MEDIUM INSPIRED EDITORIAL MASTHEAD -->
+  <header class="bg-alabaster dark:bg-ink border-b border-neutral-300 dark:border-neutral-800 px-4 pt-5 pb-3">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-wrap items-center justify-between text-xs text-neutral-600 dark:text-neutral-400 pb-3 border-b border-neutral-200 dark:border-neutral-800 gap-2">
+        <div class="flex items-center gap-3">
+          <span class="font-semibold text-deepgreen dark:text-emerald-400">⚖️ PAKISTAN EDITION</span>
+          <span>•</span>
+          <button onclick="navigateScreen(1)" class="underline hover:text-deepgreen">Preview #01 Splash</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="authStatusPill" class="px-2 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800 font-medium">Browsing as Guest</span>
+          <button onclick="navigateScreen(57)" class="hover:text-deepgreen font-medium">🔔 Alerts (#57)</button>
+          <button onclick="navigateScreen(58)" class="hover:text-deepgreen font-medium">⚙️ Settings (#58)</button>
+          <button onclick="openOverlay(13)" id="headerSignInBtn" class="bg-deepgreen hover:bg-emerald text-white px-3 py-1 rounded font-semibold">Sign In / Join</button>
+        </div>
+      </div>
+
+      <div class="py-5 text-center">
+        <p class="text-[11px] uppercase tracking-[0.25em] text-deepgreen dark:text-emerald-400 font-bold mb-1">
+          PAKISTAN'S ONE-STOP LEGAL, STATUTE & ADVOCATE NETWORK
+        </p>
+        <h1 onclick="navigateScreen(2)" class="font-serif text-4xl sm:text-6xl font-extrabold tracking-tight text-ink dark:text-white cursor-pointer">
+          The Daily Brief
+        </h1>
+        <p class="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 mt-1.5 font-serif italic">
+          “Where Citizens Find Justice, Verified Advocates Build Authority, and Every Statute Speaks Plainly.”
+        </p>
+      </div>
+
+      <div class="nyt-double-rule mb-2"></div>
+
+      <nav class="flex items-center justify-between overflow-x-auto py-1.5 gap-1 text-xs sm:text-sm font-semibold border-b border-neutral-200 dark:border-neutral-800">
+        <div class="flex items-center gap-1 sm:gap-2">
+          <button onclick="navigateScreen(2)" class="nav-tab px-3 py-1.5 rounded bg-deepgreen text-white" data-screen="2">📰 Daily Brief (#02)</button>
+          <button onclick="navigateScreen(11)" class="nav-tab px-3 py-1.5 rounded" data-screen="11">🏛️ Law Library (#11)</button>
+          <button onclick="navigateScreen(6)" class="nav-tab px-3 py-1.5 rounded" data-screen="6">👨‍⚖️ Advocates (#06)</button>
+          <button onclick="navigateScreen(10)" class="nav-tab px-3 py-1.5 rounded" data-screen="10">💬 Public Q&A (#10)</button>
+          <button onclick="navigateScreen(8)" class="nav-tab px-3 py-1.5 rounded" data-screen="8">📄 Templates (#08)</button>
+          <button onclick="protectedAction(() => navigateScreen(28))" class="nav-tab px-3 py-1.5 rounded" data-screen="28">🤖 AI Lawyer (#28)</button>
+          <button onclick="protectedAction(() => navigateScreen(26))" class="nav-tab px-3 py-1.5 rounded" data-screen="26">📅 Client Cases (#26)</button>
+          <button onclick="navigateScreen(35)" class="nav-tab px-3 py-1.5 rounded text-deepgreen dark:text-emerald-400" data-screen="35">💼 Lawyer CRM (#35)</button>
+          <button onclick="navigateScreen(40)" class="nav-tab px-3 py-1.5 rounded text-deepgreen dark:text-emerald-400" data-screen="40">⚡ AI RAG Pro (#40)</button>
+          <button onclick="navigateScreen(50)" class="nav-tab px-3 py-1.5 rounded text-gold" data-screen="50">✍️ Admin CMS (#50)</button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT -->
+  <main id="appViewport" class="flex-1 max-w-7xl w-full mx-auto px-4 py-6"></main>
+
+  <!-- MODAL & BOTTOM SHEET CONTAINER -->
+  <div id="overlayBackdrop" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div id="overlayContent" class="w-full max-w-lg"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="bg-ink text-neutral-400 border-t-4 border-deepgreen mt-12 py-8 px-4 text-xs text-center">
+    <p class="text-white font-serif text-base font-bold mb-1">The Daily Brief — Pakistan Digital Legal Platform</p>
+    <p>PBC Compliance Notice: AI outputs provide statutory legal information, not binding legal representation. • 7-Layer Zero-Trust Active</p>
+  </footer>
+
+  <script>
+    const REGISTRY = [
+      { id: 1, type: 'screen', mod: 'M1: Discovery', title: '01. Splash Screen (Deep Emerald + Antique Gold)' },
+      { id: 2, type: 'screen', mod: 'M1: Discovery', title: '02. Magazine Home Page ("The Daily Brief")' },
+      { id: 3, type: 'overlay', mod: 'M1: Discovery', title: '03. [Popup] Global Search Overlay' },
+      { id: 4, type: 'screen', mod: 'M1: Discovery', title: '04. Article / Media Reader View (Drop-Cap)' },
+      { id: 5, type: 'overlay', mod: 'M1: Discovery', title: '05. [Bottom Sheet] Social Share & Export' },
+      { id: 6, type: 'screen', mod: 'M1: Discovery', title: '06. Lawyer Directory (Verified Advocates)' },
+      { id: 7, type: 'overlay', mod: 'M1: Discovery', title: '07. [Bottom Sheet] Advanced Search Filters' },
+      { id: 8, type: 'screen', mod: 'M1: Discovery', title: '08. Template Storefront (Masonry Grid)' },
+      { id: 9, type: 'overlay', mod: 'M1: Discovery', title: '09. [Popup] Watermarked Template Preview Modal' },
+      { id: 10, type: 'screen', mod: 'M1: Discovery', title: '10. Public Q&A Forum Feed (Read-Only Guest)' },
+      { id: 11, type: 'screen', mod: 'M1: Discovery', title: '11. Digital Law Library Index (PPC / Constitution)' },
+      { id: 12, type: 'screen', mod: 'M1: Discovery', title: '12. Law / Act Details Reader (Bare Act + Summary)' },
+      { id: 13, type: 'overlay', mod: 'M2: Auth', title: '13. [Bottom Sheet] Authentication Trigger' },
+      { id: 14, type: 'screen', mod: 'M2: Auth', title: '14. Secure Login / Signup (+92 Phone / Email)' },
+      { id: 15, type: 'overlay', mod: 'M2: Auth', title: '15. [Popup] OTP Verification Modal (4-Box)' },
+      { id: 16, type: 'screen', mod: 'M2: Auth', title: '16. Role Selection (Client vs. Advocate)' },
+      { id: 17, type: 'screen', mod: 'M2: Auth', title: '17. Client Profile Setup Wizard' },
+      { id: 18, type: 'screen', mod: 'M2: Auth', title: '18. Lawyer Verification Flow (Bar License)' },
+      { id: 19, type: 'overlay', mod: 'M2: Auth', title: '19. [Bottom Sheet] Media Picker (License Upload)' },
+      { id: 20, type: 'overlay', mod: 'M2: Auth', title: '20. [Popup] Profile Under Review Modal' },
+      { id: 21, type: 'screen', mod: 'M3: Client', title: '21. Lawyer Profile View (Gold Verified Badge)' },
+      { id: 22, type: 'screen', mod: 'M3: Client', title: '22. Appointment Booking Calendar' },
+      { id: 23, type: 'overlay', mod: 'M3: Client', title: '23. [Popup] Confirm Time Slot Modal' },
+      { id: 24, type: 'screen', mod: 'M3: Client', title: '24. Escrow Checkout & Payment Gateway' },
+      { id: 25, type: 'overlay', mod: 'M3: Client', title: '25. [Popup] Payment Success Modal' },
+      { id: 26, type: 'screen', mod: 'M3: Client', title: '26. My Appointments / Case History' },
+      { id: 27, type: 'overlay', mod: 'M3: Client', title: '27. [Popup] Cancel / Reschedule Request Modal' },
+      { id: 28, type: 'screen', mod: 'M3: Client', title: '28. Basic AI Legal Assistant Chat' },
+      { id: 29, type: 'overlay', mod: 'M3: Client', title: '29. [Bottom Sheet] Attachment Options (OCR/PDF)' },
+      { id: 30, type: 'overlay', mod: 'M3: Client', title: '30. [Overlay] Voice-to-Text Recording Soundwave' },
+      { id: 31, type: 'screen', mod: 'M3: Client', title: '31. Post a Question (Q&A Forum)' },
+      { id: 32, type: 'overlay', mod: 'M3: Client', title: '32. [Popup] "Keep Anonymous" Warning Modal' },
+      { id: 33, type: 'screen', mod: 'M3: Client', title: '33. Pro-Bono Application Form' },
+      { id: 34, type: 'overlay', mod: 'M3: Client', title: '34. [Bottom Sheet] Income Certificate Guidelines' },
+      { id: 35, type: 'screen', mod: 'M4: Lawyer CRM', title: '35. Lawyer Home Dashboard (Advocate Hub)' },
+      { id: 36, type: 'screen', mod: 'M4: Lawyer CRM', title: '36. Lead Management (New Client Requests)' },
+      { id: 37, type: 'overlay', mod: 'M4: Lawyer CRM', title: '37. [Popup] Accept / Decline Case Modal' },
+      { id: 38, type: 'screen', mod: 'M4: Lawyer CRM', title: '38. Active Case Workspace (Notes/Files/Timeline)' },
+      { id: 39, type: 'overlay', mod: 'M4: Lawyer CRM', title: '39. [Popup] Add Milestone / Update Progress' },
+      { id: 40, type: 'screen', mod: 'M4: Lawyer CRM', title: '40. AI Researcher Pro (Split-Pane RAG + Editor)' },
+      { id: 41, type: 'overlay', mod: 'M4: Lawyer CRM', title: '41. [Bottom Sheet] AI Prompt Suggestions' },
+      { id: 42, type: 'overlay', mod: 'M4: Lawyer CRM', title: '42. [Popup] Citation Details Modal (PLD/SCMR)' },
+      { id: 43, type: 'screen', mod: 'M4: Lawyer CRM', title: '43. Reputation Desk (Answering Public Q&A)' },
+      { id: 44, type: 'screen', mod: 'M4: Lawyer CRM', title: '44. Availability & Roster Calendar' },
+      { id: 45, type: 'overlay', mod: 'M4: Lawyer CRM', title: '45. [Popup] Block Dates / Working Hours Modal' },
+      { id: 46, type: 'screen', mod: 'M4: Lawyer CRM', title: '46. Earnings & Escrow Wallet' },
+      { id: 47, type: 'overlay', mod: 'M4: Lawyer CRM', title: '47. [Popup] Withdraw Funds Request Modal (IBAN)' },
+      { id: 48, type: 'screen', mod: 'M4: Lawyer CRM', title: '48. Pro-Bono Case Review Desk' },
+      { id: 49, type: 'screen', mod: 'M4: Lawyer CRM', title: '49. Private Lawyer-to-Lawyer Network' },
+      { id: 50, type: 'screen', mod: 'M5: CMS & Comms', title: '50. Editorial Dashboard & Admin CMS' },
+      { id: 51, type: 'overlay', mod: 'M5: CMS & Comms', title: '51. [Popup] Media Library / Embed YouTube Modal' },
+      { id: 52, type: 'overlay', mod: 'M5: CMS & Comms', title: '52. [Popup] Schedule Publishing Modal' },
+      { id: 53, type: 'screen', mod: 'M5: CMS & Comms', title: '53. Secure Live Chat Room (E2EE)' },
+      { id: 54, type: 'overlay', mod: 'M5: CMS & Comms', title: '54. [Bottom Sheet] File Share Picker' },
+      { id: 55, type: 'screen', mod: 'M5: CMS & Comms', title: '55. In-App Video Consultation Room' },
+      { id: 56, type: 'overlay', mod: 'M5: CMS & Comms', title: '56. [Popup] End Call / 5-Star Rating Modal' },
+      { id: 57, type: 'screen', mod: 'M5: CMS & Comms', title: '57. Notifications Hub' },
+      { id: 58, type: 'screen', mod: 'M5: CMS & Comms', title: '58. Global Settings & Profile Edit' },
+      { id: 59, type: 'overlay', mod: 'M5: CMS & Comms', title: '59. [Bottom Sheet] Language Selector (EN/UR)' },
+      { id: 60, type: 'overlay', mod: 'M5: CMS & Comms', title: '60. [Bottom Sheet] Theme Selector (Light/Dark)' },
+      { id: 61, type: 'overlay', mod: 'M5: CMS & Comms', title: '61. [Popup] Logout Confirmation Modal' }
+    ];
+
+    const STATE = {
+      activeScreen: 2, lang: 'en', role: 'guest', selectedLawyerId: 1, selectedActId: 1,
+      selectedDate: 'Oct 22, 2026', selectedSlot: '04:00 PM',
+      articles: [
+        {
+          id: 1, category: 'Constitutional & Property Law',
+          title: 'Supreme Court Mandates Biometric Digital Verification for All Overseas Property Transfers',
+          titleUr: 'سپریم کورٹ کا بیرون ملک مقیم پاکستانیوں کے لیے جائیداد کی منتقلی پر بائیو میٹرک تصدیق کا نیا حکم',
+          author: 'Barrister Aitzaz Raza, ASC', readTime: '6 min read', date: 'Oct 19, 2026',
+          excerpt: 'In a landmark 5-0 ruling (PLD 2026 SC 418), the apex court directed provincial land authorities in Punjab and Sindh to integrate NADRA e-Verification directly with online Fard and Registry portals.',
+          body: 'The Supreme Court of Pakistan has fundamentally reshaped real-estate litigation across the country. Delivering the unanimous verdict in PLD 2026 SC 418, the larger bench held that unregistered or unverified overseas Powers of Attorney (Mukhtar Nama) account for nearly 42% of civil property disputes pending in District and High Courts.'
+        },
+        {
+          id: 2, category: 'Cyber Crime (PECA)',
+          title: 'Understanding Section 20 & 24 of PECA: How to File an FIA Cyber Crime Complaint Online',
+          titleUr: 'پیکا ایکٹ سیکشن 20 اور 24: ایف آئی اے سائبر کرائم میں شکایت درج کرنے کا مکمل طریقہ',
+          author: 'Adv. Ayesha Siddiqui, High Court', readTime: '4 min read', date: 'Oct 18, 2026',
+          excerpt: 'Step-by-step legal guide on preserving WhatsApp digital evidence and securing protective orders.',
+          body: 'Complete guide to PECA 2016 digital evidence preservation under Qanun-e-Shahadat Article 164.'
+        }
+      ],
+      lawyers: [
+        { id: 1, name: 'Barrister Aitzaz Raza', court: 'Supreme Court Advocate (ASC)', city: 'Lahore', specialty: 'Property & Constitutional', fee: 12000, rating: 4.9, reviews: 142, proBono: true, exp: '16 Years', barId: 'PBC-LHR-99241' },
+        { id: 2, name: 'Adv. Ayesha Siddiqui', court: 'High Court Advocate', city: 'Islamabad', specialty: 'Cyber Crime & Corporate', fee: 8500, rating: 4.95, reviews: 98, proBono: true, exp: '9 Years', barId: 'IBC-ISL-44812' },
+        { id: 3, name: 'Adv. Zainab Tariq', court: 'High Court Advocate', city: 'Lahore', specialty: 'Family Law & Inheritance', fee: 6000, rating: 4.88, reviews: 215, proBono: true, exp: '11 Years', barId: 'PLBC-LHR-71209' }
+      ],
+      laws: [
+        {
+          id: 1, act: 'Pakistan Penal Code (Act XLV of 1860)', section: 'Section 489-F',
+          title: 'Dishonestly issuing a cheque (Cheque Bounce)',
+          titleUr: 'بددیانتی سے چیک جاری کرنا جو بینک سے ڈس آنر ہو جائے',
+          bailable: 'Non-Bailable', punishment: 'Up to 3 Years Imprisonment or Fine', court: 'Magistrate First Class',
+          bareText: 'Whoever dishonestly issues a cheque towards re-payment of a loan or fulfillment of an obligation which is dishonoured on presentation, shall be punishable with imprisonment which may extend to three years, or with fine, or with both.',
+          summaryEn: 'Issuing a cheque to repay a loan or obligation that bounces due to insufficient funds is a criminal offense punishable by up to 3 years.',
+          summaryUr: 'قرض کی واپسی یا مالی ذمہ داری کے لیے دیا گیا چیک باؤنس ہونے پر 3 سال تک قید یا جرمانے کی سزا ہو سکتی ہے۔',
+          citations: ['PLD 2025 SC 112', '2024 SCMR 891']
+        },
+        {
+          id: 2, act: 'Constitution of Pakistan, 1973', section: 'Article 199',
+          title: 'Jurisdiction of High Court (Writ Petition)',
+          titleUr: 'ہائی کورٹ کا دائرہ اختیار (آئینی رٹ پٹیشن)',
+          bailable: 'Constitutional Remedy', punishment: 'Judicial Review / Writ', court: 'High Court',
+          bareText: 'Subject to the Constitution, a High Court may, if it is satisfied that no other adequate remedy is provided by law, make an order directing a person performing functions in connection with the affairs of the Federation or a Province.',
+          summaryEn: 'Empowers citizens to file a Writ Petition directly in the High Court against unlawful state action.',
+          summaryUr: 'آئین کا آرٹیکل 199 ہر شہری کو ہائی کورٹ میں آئینی رٹ پٹیشن دائر کرنے کا حق دیتا ہے۔',
+          citations: ['PLD 2026 SC 418']
+        }
+      ],
+      templates: [
+        { id: 1, title: 'Residential & Commercial Rent Agreement (Kiraya Nama)', price: 0, tag: 'FREE', format: 'Bilingual Word + PDF' },
+        { id: 2, title: 'Non-Disclosure Agreement (NDA - Pakistan Law)', price: 1500, tag: 'PKR 1,500', format: 'Editable DOCX' },
+        { id: 3, title: 'Special Power of Attorney for Overseas Pakistanis (Mukhtar Nama)', price: 2500, tag: 'PKR 2,500', format: 'Embassy Ready' }
+      ],
+      questions: [
+        { id: 1, category: 'Property Law', q: 'Builder in Lahore is delaying possession of apartment by 2 years despite full payment. What legal action can I take?', replies: 4, upvotes: 39, topLawyer: 'Barrister Aitzaz Raza' },
+        { id: 2, category: 'Cyber Crime', q: 'Someone created a fake business page using my name on WhatsApp. How to file FIA complaint?', replies: 6, upvotes: 54, topLawyer: 'Adv. Ayesha Siddiqui' }
+      ]
+    };
+
+    function initSelector() {
+      document.getElementById('screenSelector').innerHTML = REGISTRY.map(item =>
+        `<option value="${item.id}" ${item.id === 2 ? 'selected' : ''}>${item.title}</option>`
+      ).join('');
+    }
+
+    function jumpToItem(id) {
+      const item = REGISTRY.find(r => r.id === id);
+      if (!item) return;
+      document.getElementById('screenSelector').value = id;
+      document.getElementById('currentScreenBadge').textContent = `Screen #${String(id).padStart(2, '0')}: ${item.title}`;
+      if (item.type === 'overlay') openOverlay(id);
+      else { closeOverlay(); navigateScreen(id); }
+    }
+
+    function setRoleMode(role) {
+      STATE.role = role;
+      document.getElementById('authStatusPill').textContent = role === 'guest' ? 'Browsing as Guest' : `Logged In: ${role.toUpperCase()}`;
+    }
+
+    function protectedAction(cb) {
+      if (STATE.role === 'guest') openOverlay(13);
+      else cb();
+    }
+
+    function toggleLanguage() {
+      STATE.lang = STATE.lang === 'en' ? 'ur' : 'en';
+      document.documentElement.dir = STATE.lang === 'ur' ? 'rtl' : 'ltr';
+      navigateScreen(STATE.activeScreen);
+    }
+
+    function navigateScreen(screenId) {
+      STATE.activeScreen = screenId;
+      const item = REGISTRY.find(r => r.id === screenId);
+      if (item) {
+        document.getElementById('screenSelector').value = screenId;
+        document.getElementById('currentScreenBadge').textContent = `Screen #${String(screenId).padStart(2, '0')}: ${item.title}`;
+      }
+      const vp = document.getElementById('appViewport');
+
+      if (screenId === 1) {
+        vp.innerHTML = `
+          <div class="bg-deepgreen text-white rounded-2xl min-h-[500px] flex flex-col items-center justify-between p-10 border-2 border-gold text-center">
+            <div class="text-xs uppercase tracking-widest text-gold">Screen #01 • Splash Screen</div>
+            <div>
+              <div class="w-20 h-20 mx-auto mb-4 rounded-full border-2 border-gold bg-ink/40 grid place-items-center text-4xl text-gold">⚖️</div>
+              <h2 class="font-serif text-4xl font-bold mb-2">The Daily Brief</h2>
+              <p class="text-gold text-xs uppercase tracking-widest">Pakistan Digital Legal Ecosystem</p>
+            </div>
+            <button onclick="navigateScreen(2)" class="bg-gold text-ink font-bold px-6 py-2.5 rounded-lg text-sm">Enter Magazine Home (#02) →</button>
+          </div>`;
+        return;
+      }
+
+      if (screenId === 2) {
+        const hero = STATE.articles[0];
+        vp.innerHTML = `
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-7">
+              <div class="bg-deepgreen text-white rounded-xl p-6 sm:p-8 border border-gold/40 shadow-lg mb-6">
+                <span class="inline-block bg-gold text-ink text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded mb-3">${hero.category}</span>
+                <h2 onclick="navigateScreen(4)" class="font-serif text-2xl sm:text-4xl font-bold cursor-pointer hover:underline mb-3">
+                  ${STATE.lang === 'ur' ? hero.titleUr : hero.title}
+                </h2>
+                <p class="text-emerald-100 text-sm mb-4">${hero.excerpt}</p>
+                <div class="flex justify-between items-center pt-3 border-t border-emerald-800 text-xs">
+                  <span>By ${hero.author} • ${hero.readTime}</span>
+                  <button onclick="navigateScreen(4)" class="bg-gold text-ink font-bold px-4 py-1.5 rounded">Read Article (#04) →</button>
+                </div>
+              </div>
+              <h3 class="font-serif text-xl font-bold border-b-2 border-ink pb-2 mb-4">Digital Law Library & Public Q&A</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div onclick="navigateScreen(11)" class="p-4 rounded-xl bg-white dark:bg-charcoal border cursor-pointer hover:border-deepgreen">
+                  <div class="text-xs font-bold text-deepgreen">🏛️ Screen #11 & #12</div>
+                  <div class="font-serif text-lg font-bold mt-1">Pakistan Penal Code & Constitution</div>
+                  <p class="text-xs text-neutral-500 mt-1">Read Bare Act + Urdu & English Summaries</p>
+                </div>
+                <div onclick="navigateScreen(8)" class="p-4 rounded-xl bg-white dark:bg-charcoal border cursor-pointer hover:border-deepgreen">
+                  <div class="text-xs font-bold text-deepgreen">📜 Screen #08 & #09</div>
+                  <div class="font-serif text-lg font-bold mt-1">Legal Templates Storefront</div>
+                  <p class="text-xs text-neutral-500 mt-1">Kiraya Nama, NDA, Power of Attorney</p>
+                </div>
+              </div>
+            </div>
+            <div class="lg:col-span-5 space-y-5">
+              <div class="bg-ink text-white rounded-xl p-5 border-l-4 border-gold">
+                <span class="text-xs font-bold text-gold uppercase">🤖 Screen #28 • AI Legal Assistant</span>
+                <h3 class="font-serif text-lg font-bold mt-1 mb-2">Ask Pakistan Law AI or Scan FIR</h3>
+                <div class="flex gap-2">
+                  <button onclick="navigateScreen(28)" class="flex-1 bg-deepgreen border border-gold text-white font-semibold py-2 rounded text-xs">Open AI Chat (#28)</button>
+                  <button onclick="openOverlay(30)" class="bg-charcoal border px-3 py-2 rounded text-xs">🎙️ Voice (#30)</button>
+                </div>
+              </div>
+              <div class="bg-white dark:bg-charcoal p-5 rounded-xl border">
+                <div class="flex justify-between items-center mb-3">
+                  <h3 class="font-serif text-lg font-bold">Top High Court Advocates</h3>
+                  <button onclick="navigateScreen(6)" class="text-xs font-bold text-deepgreen">All (#06) →</button>
+                </div>
+                <div class="space-y-3">
+                  ${STATE.lawyers.map(lw => `
+                    <div class="p-3 rounded-lg bg-alabaster dark:bg-ink border flex justify-between items-center">
+                      <div>
+                        <div class="font-bold text-xs">${lw.name} <span class="text-gold">✓ Verified</span></div>
+                        <div class="text-[11px] text-neutral-500">${lw.court} • PKR ${lw.fee.toLocaleString()}</div>
+                      </div>
+                      <button onclick="STATE.selectedLawyerId=${lw.id}; navigateScreen(21)" class="bg-deepgreen text-white text-xs px-3 py-1.5 rounded">Consult (#21)</button>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      if (screenId === 4) {
+        const art = STATE.articles[0];
+        vp.innerHTML = `
+          <div class="max-w-3xl mx-auto bg-white dark:bg-charcoal p-8 rounded-2xl border">
+            <button onclick="navigateScreen(2)" class="text-xs font-bold text-deepgreen mb-4">← Back to Magazine Home (#02)</button>
+            <h1 class="font-serif text-3xl font-bold mb-3">${STATE.lang === 'ur' ? art.titleUr : art.title}</h1>
+            <div class="flex justify-between items-center py-3 border-y text-xs mb-6">
+              <span>By <strong>${art.author}</strong> • ${art.date}</span>
+              <button onclick="openOverlay(5)" class="bg-deepgreen text-white px-3 py-1.5 rounded">📤 Share & Export (#05)</button>
+            </div>
+            <p class="drop-cap font-serif text-base leading-relaxed mb-6">${art.body}</p>
+            <button onclick="navigateScreen(21)" class="w-full bg-deepgreen text-gold border border-gold font-bold py-3 rounded-xl text-xs">Book Verified Advocate for This Issue (#21) →</button>
+          </div>`;
+        return;
+      }
+
+      if (screenId === 6) {
+        vp.innerHTML = `
+          <div class="flex justify-between items-center mb-6 pb-3 border-b-2 border-ink">
+            <h2 class="font-serif text-3xl font-bold">Screen #06: Verified Lawyer Directory</h2>
+            <button onclick="openOverlay(7)" class="bg-deepgreen text-gold border border-gold text-xs font-bold px-4 py-2 rounded-lg">⚙️ Filters (#07)</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            ${STATE.lawyers.map(lw => `
+              <div class="bg-white dark:bg-charcoal p-6 rounded-xl border flex flex-col justify-between">
+                <div>
+                  <span class="bg-goldlight text-ink border border-gold text-[10px] font-bold px-2 py-0.5 rounded">✓ PBC VERIFIED</span>
+                  <h3 class="font-serif text-xl font-bold mt-2">${lw.name}</h3>
+                  <p class="text-xs text-neutral-500">${lw.court} •${lw.city}</p>
+                  <p class="text-xs font-bold text-deepgreen mt-2">${lw.specialty} • PKR ${lw.fee.toLocaleString()}/hr</p>
+                </div>
+                <button onclick="STATE.selectedLawyerId=${lw.id}; navigateScreen(21)" class="mt-4 w-full bg-deepgreen text-white text-xs font-bold py-2.5 rounded-lg">View Profile & Book (#21)</button>
+              </div>
+            `).join('')}
+          </div>`;
+        return;
+      }
+
+      if (screenId === 8) {
+        vp.innerHTML = `
+          <h2 class="font-serif text-3xl font-bold mb-6 pb-3 border-b-2 border-ink">Screen #08: Legal Template Storefront</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            ${STATE.templates.map(t => `
+              <div class="bg-white dark:bg-charcoal p-6 rounded-xl border flex flex-col justify-between">
+                <div>
+                  <span class="text-xs font-extrabold px-2 py-0.5 rounded bg-goldlight text-ink border border-gold">${t.tag}</span>
+                  <h3 class="font-serif text-lg font-bold mt-2">${t.title}</h3>
+                  <p class="text-xs text-neutral-500 mt-1">${t.format}</p>
+                </div>
+                <button onclick="openOverlay(9)" class="mt-4 w-full bg-deepgreen text-white text-xs font-bold py-2.5 rounded-lg">Watermarked Preview (#09)</button>
+              </div>
+            `).join('')}
+          </div>`;
+        return;
+      }
+
+      if (screenId === 10) {
+        vp.innerHTML = `
+          <div class="flex justify-between items-center mb-6 pb-3 border-b-2 border-ink">
+            <h2 class="font-serif text-3xl font-bold">Screen #10: Public Q&A Forum Feed</h2>
+            <button onclick="navigateScreen(31)" class="bg-deepgreen text-gold border border-gold text-xs font-bold px-4 py-2 rounded-lg">+ Ask Question (#31)</button>
+          </div>
+          <div class="space-y-4">
+            ${STATE.questions.map(q => `
+              <div class="bg-white dark:bg-charcoal p-6 rounded-xl border">
+                <span class="text-xs font-bold text-deepgreen">${q.category}</span>
+                <h3 class="font-serif text-lg font-bold mt-1">${q.q}</h3>
+                <p class="text-xs text-neutral-500 mt-2">Top Reply by ${q.topLawyer} • ${q.replies} Replies • ▲ ${q.upvotes} Upvotes</p>
+              </div>
+            `).join('')}
+          </div>`;
+        return;
+      }
+
+      if (screenId === 11 || screenId === 12) {
+        const law = STATE.laws[0];
+        vp.innerHTML = `
+          <div class="bg-white dark:bg-charcoal p-8 rounded-2xl border">
+            <span class="text-xs font-bold text-gold uppercase">Screen #${screenId} • Pakistan Code & Case Precedents</span>
+            <h2 class="font-serif text-3xl font-bold mt-1 mb-4">${law.act} — ${law.section}</h2>
+            <div class="p-4 rounded-xl bg-alabaster dark:bg-ink border-l-4 border-ink mb-4">
+              <div class="text-xs font-bold uppercase mb-1">Official Bare Act Text</div>
+              <p class="font-serif italic text-sm">${law.bareText}</p>
+            </div>
+            <div class="p-4 rounded-xl bg-deepgreen/10 border-l-4 border-deepgreen mb-4">
+              <div class="text-xs font-bold uppercase text-deepgreen mb-1">Plain Summary (English & اردو)</div>
+              <p class="text-xs mb-2">${law.summaryEn}</p>
+              <p class="text-sm font-urdu text-right" dir="rtl">${law.summaryUr}</p>
+            </div>
+            <button onclick="openOverlay(42)" class="bg-ink text-gold border border-gold text-xs font-bold px-4 py-2 rounded-lg">⚖️ View Linked Supreme Court Citation PLD 2025 SC 112 (#42)</button>
+          </div>`;
+        return;
+      }
+
+      // Universal Renderer for all remaining Screens (14-58)
+      vp.innerHTML = `
+        <div class="max-w-4xl mx-auto bg-white dark:bg-charcoal p-8 rounded-2xl border shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-4 mb-6 border-b">
+            <div>
+              <span class="text-xs font-bold uppercase text-deepgreen dark:text-emerald-400">${item.mod} • Interactive Screen #${String(screenId).padStart(2, '0')}</span>
+              <h2 class="font-serif text-3xl font-bold mt-1">${item.title}</h2>
+            </div>
+            <div class="flex gap-2 text-xs">
+              <button onclick="navigateScreen(Math.max(1, ${screenId}-1))" class="px-3 py-1.5 rounded border">← Prev</button>
+              <button onclick="jumpToItem(Math.min(61, ${screenId}+1))" class="bg-deepgreen text-white px-3 py-1.5 rounded">Next (#${Math.min(61, screenId+1)}) →</button>
+            </div>
+          </div>
+          <div class="p-6 rounded-xl bg-alabaster dark:bg-ink border space-y-4 text-xs">
+            <p class="text-sm leading-relaxed">
+              You are viewing <strong>${item.title}</strong> styled in your locked-in <strong>NYT & Medium Black + Deep Dark Green (#043927) + Antique Gold (#C5A059)</strong> design system.
+            </p>
+            <div class="flex flex-wrap gap-2 pt-2">
+              <button onclick="navigateScreen(21)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">Lawyer Profile (#21)</button>
+              <button onclick="navigateScreen(22)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">Booking Calendar (#22)</button>
+              <button onclick="navigateScreen(24)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">Escrow Checkout (#24)</button>
+              <button onclick="navigateScreen(28)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">AI Chat (#28)</button>
+              <button onclick="navigateScreen(35)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">Advocate CRM (#35)</button>
+              <button onclick="navigateScreen(40)" class="bg-deepgreen text-white px-3.5 py-2 rounded-lg font-bold">Split-Pane RAG (#40)</button>
+              <button onclick="navigateScreen(50)" class="bg-gold text-ink px-3.5 py-2 rounded-lg font-bold">Admin CMS (#50)</button>
+              <button onclick="navigateScreen(55)" class="bg-ink text-white px-3.5 py-2 rounded-lg font-bold">Video Room (#55)</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function openOverlay(id) {
+      const backdrop = document.getElementById('overlayBackdrop');
+      const box = document.getElementById('overlayContent');
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+      document.getElementById('screenSelector').value = id;
+      const item = REGISTRY.find(r => r.id === id);
+      if (item) document.getElementById('currentScreenBadge').textContent = `Overlay #${String(id).padStart(2, '0')}: ${item.title}`;
+
+      if (id === 60) {
+        box.innerHTML = `
+          <div class="bg-white dark:bg-charcoal p-6 rounded-2xl border-2 border-gold shadow-2xl text-xs space-y-3">
+            <h3 class="font-serif text-xl font-bold">Appearance (#60)</h3>
+            <button onclick="document.documentElement.classList.remove('dark'); closeOverlay()" class="w-full p-3 rounded-xl border font-bold">☀️ Light Mode (Warm Alabaster + Deep Green)</button>
+            <button onclick="document.documentElement.classList.add('dark'); closeOverlay()" class="w-full p-3 rounded-xl border font-bold">🌑 Dark Mode (NYT Black + Deep Emerald)</button>
+          </div>`;
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="bg-white dark:bg-charcoal p-6 rounded-2xl border-2 border-gold shadow-2xl text-xs space-y-4">
+          <div class="flex justify-between items-center border-b pb-2">
+            <span class="font-bold text-deepgreen uppercase">${item ? item.mod : 'Overlay'}</span>
+            <button onclick="closeOverlay()" class="font-bold text-sm">✕</button>
+          </div>
+          <h3 class="font-serif text-2xl font-bold">${item ? item.title : 'Modal'}</h3>
+          <p class="text-neutral-600 dark:text-neutral-300">Interactive Popup / Bottom Sheet #${String(id).padStart(2, '0')} in Deep Emerald Green & Antique Gold.</p>
+          <div class="flex justify-end gap-2">
+            <button onclick="closeOverlay()" class="px-4 py-2 rounded border">Close</button>
+            <button onclick="closeOverlay(); jumpToItem(Math.min(61, ${id}+1))" class="bg-deepgreen text-gold border border-gold font-bold px-4 py-2 rounded">Continue (#${Math.min(61, id+1)}) →</button>
+          </div>
+        </div>`;
+    }
+
+    function closeOverlay() {
+      const backdrop = document.getElementById('overlayBackdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+
+    initSelector();
+    navigateScreen(2);
+  </script>
+</body>
+</html>
