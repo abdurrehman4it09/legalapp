@@ -1,95 +1,86 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import Link from 'next/link'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 )
 
-export default function ManageLaws() {
-  const [category, setCategory] = useState('Constitution')
-  const [title, setTitle] = useState(''); const [content, setContent] = useState('')
-  const [titleUrdu, setTitleUrdu] = useState(''); const [contentUrdu, setContentUrdu] = useState('')
-  const [statusMsg, setStatusMsg] = useState('')
-  const [lawsList, setLawsList] = useState<any[]>([])
+export default function AdminLaws() {
+  const [laws, setLaws] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => { fetchLaws() }, [])
+  useEffect(() => {
+    async function fetchLaws() {
+      try {
+        const { data, error } = await supabase
+          .from('laws')
+          .select('*')
+          .order('created_at', { ascending: false })
 
-  async function fetchLaws() {
-    const { data } = await supabase.from('laws').select('*').order('id', { ascending: false })
-    if (data) setLawsList(data)
-  }
-
-  async function publishLaw() {
-    setStatusMsg('Saving...')
-    const { error } = await supabase.from('laws').insert([{ category, title, content, title_urdu: titleUrdu, content_urdu: contentUrdu }])
-    if (error) setStatusMsg('Failed to save.')
-    else {
-      setStatusMsg('Successfully Saved!')
-      setTitle(''); setContent(''); setTitleUrdu(''); setContentUrdu(''); fetchLaws()
+        if (error) throw error
+        setLaws(data || [])
+      } catch (error) {
+        console.error('Error fetching laws:', error)
+      } finally {
+        setLoading(false)
+      }
     }
-  }
 
-  async function deleteLaw(id: number) {
-    await supabase.from('laws').delete().eq('id', id); fetchLaws()
-  }
+    fetchLaws()
+  }, [])
 
   return (
-    <div className="flex min-h-screen bg-white text-gray-900 font-sans border-t-4 border-emerald-800">
-      <div className="w-64 border-r border-gray-100 p-8 h-full fixed bg-white">
-        <h2 className="text-xl font-bold mb-12 tracking-tight">Admin<span className="text-emerald-800">.</span></h2>
-        <ul className="space-y-6 text-sm font-bold text-gray-400 uppercase tracking-widest">
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin">Post News</Link></li>
-          <li className="text-emerald-800 border-b-2 border-emerald-800 inline-block pb-1">Manage Laws</li>
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin/lawyers">Manage Lawyers</Link></li>
-        </ul>
+    <div className="p-8 max-w-6xl mx-auto bg-white min-h-screen">
+      <div className="flex justify-between items-center mb-8 border-b pb-4">
+        <h1 className="text-3xl font-bold text-gray-900">Manage Legal Library</h1>
+        <button className="bg-emerald-800 text-white px-4 py-2 rounded-md hover:bg-emerald-900 transition-colors">
+          + Add New Law
+        </button>
       </div>
 
-      <div className="flex-1 p-12 ml-64 max-w-5xl">
-        <header className="mb-12 border-b border-gray-100 pb-6">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Manage Laws</h1>
-        </header>
-
-        <div className="mb-16">
-          <select className="w-full mb-8 p-4 bg-gray-50 border border-gray-100 rounded focus:outline-none focus:border-emerald-800" value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="Constitution">Constitution of Pakistan</option>
-            <option value="Pakistan Penal Code">Pakistan Penal Code (PPC)</option>
-            <option value="Act">General Act / Ordinance</option>
-            <option value="Judgment">Court Judgment</option>
-          </select>
-          <div className="grid grid-cols-2 gap-12">
-            <div>
-              <h4 className="font-bold text-xs uppercase tracking-widest text-emerald-800 mb-6">— English (LTR)</h4>
-              <input type="text" placeholder="Title..." className="w-full mb-6 p-4 bg-gray-50 border border-gray-100 rounded outline-none focus:border-emerald-800" value={title} onChange={(e) => setTitle(e.target.value)} />
-              <textarea placeholder="Text..." className="w-full mb-4 p-4 bg-gray-50 border border-gray-100 rounded h-48 outline-none focus:border-emerald-800" value={content} onChange={(e) => setContent(e.target.value)} />
-            </div>
-            <div dir="rtl">
-              <h4 className="font-bold text-xs uppercase tracking-widest text-emerald-800 mb-6">— اردو (RTL)</h4>
-              <input type="text" placeholder="عنوان..." className="w-full mb-6 p-4 bg-gray-50 border border-gray-100 rounded outline-none focus:border-emerald-800" value={titleUrdu} onChange={(e) => setTitleUrdu(e.target.value)} />
-              <textarea placeholder="تفصیل..." className="w-full mb-4 p-4 bg-gray-50 border border-gray-100 rounded h-48 outline-none focus:border-emerald-800" value={contentUrdu} onChange={(e) => setContentUrdu(e.target.value)} />
-            </div>
-          </div>
-          <button onClick={publishLaw} className="bg-emerald-800 text-white px-8 py-3 rounded font-bold tracking-wider hover:bg-emerald-900 transition">Save Law</button>
-          {statusMsg && <p className="mt-4 font-bold text-emerald-800">{statusMsg}</p>}
+      {loading ? (
+        <p className="text-emerald-800 font-medium animate-pulse">Loading legal records...</p>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title / Title (Urdu)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {laws.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-4 text-center text-gray-500">No laws found in the database.</td>
+                </tr>
+              ) : (
+                laws.map((law) => (
+                  <tr key={law.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{law.title || 'Untitled'}</div>
+                      <div className="text-sm text-gray-500">{law.title_urdu || ''}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">
+                        {law.category || 'General'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button className="text-emerald-600 hover:text-emerald-900 mr-4">Edit</button>
+                      <button className="text-red-600 hover:text-red-900">Delete</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-
-        <div>
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Saved Library</h3>
-          <div className="space-y-4">
-            {lawsList.map((law) => (
-              <div key={law.id} className="border-b border-gray-100 pb-4 flex justify-between items-center group">
-                <div>
-                  <span className="text-xs text-emerald-800 uppercase font-bold">— {law.category}</span>
-                  <h4 className="font-bold text-gray-900">{law.title} | {law.title_urdu}</h4>
-                </div>
-                <button onClick={() => deleteLaw(law.id)} className="text-xs text-red-500 font-bold uppercase tracking-widest hover:text-red-700 opacity-0 group-hover:opacity-100">Delete</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
