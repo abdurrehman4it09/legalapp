@@ -1,58 +1,27 @@
-import type { Metadata } from 'next'
-import './globals.css'
-import Link from 'next/link'
+import "./globals.css";
+import React from "react";
 
-export const metadata: Metadata = {
-  title: 'Pakistan Legal Platform | Digital Legal Directory',
-  description: 'Find verified lawyers, legal statutes, and case updates across Pakistan.',
-}
+export const metadata = {
+  title: "The Daily Legal Brief | Pakistan Legal Journal & Advocate Network",
+  description: "Minimalist legal magazine, Pakistan law library, and verified High Court advocates.",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col bg-white text-gray-900 font-sans antialiased">
-        <header className="border-b border-gray-100 bg-white sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-            <Link href="/" className="font-bold text-xl text-emerald-800 tracking-tight">
-              Pakistan Legal Platform
-            </Link>
-            <nav className="flex items-center space-x-6 text-sm font-medium text-gray-600">
-              <Link href="/article" className="hover:text-emerald-800 transition-colors">
-                News
-              </Link>
-              <Link href="/lawyers" className="hover:text-emerald-800 transition-colors">
-                Lawyers
-              </Link>
-              <Link href="/laws" className="hover:text-emerald-800 transition-colors">
-                Laws
-              </Link>
-              <Link href="/urdu" className="hover:text-emerald-800 transition-colors">
-                اردو
-              </Link>
-              <Link
-                href="/admin"
-                className="bg-emerald-800 text-white px-3 py-1.5 rounded-md hover:bg-emerald-900 transition-colors text-xs uppercase tracking-wider"
-              >
-                Admin
-              </Link>
-            </nav>
-          </div>
-        </header>
-
-        <main className="flex-1">
-          {children}
-        </main>
-
-        <footer className="border-t border-gray-100 bg-gray-50 py-8">
-          <div className="max-w-6xl mx-auto px-6 text-center text-xs text-gray-500 uppercase tracking-widest">
-            © 2026 Pakistan Legal Platform. All Rights Reserved.
-          </div>
-        </footer>
-      </body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>{children}</body>
     </html>
-  )
+  );
 }
