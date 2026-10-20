@@ -2,23 +2,33 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Scale, Lock, Unlock } from "lucide-react";
+import { Scale, Lock, Unlock, ShieldCheck } from "lucide-react";
+import { useAuthRBAC } from "@/app/AuthContext";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const {
+    role,
+    checkModuleAccess,
+    switchRoleAndVerify,
+    verifyProfileRole,
+  } = useAuthRBAC();
   const [isLocked, setIsLocked] = useState(false);
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const adminAccessCheck = checkModuleAccess("admin_cms");
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password === "admin123") {
       if (typeof window !== "undefined") {
         localStorage.setItem("plp_admin_access", "granted");
       }
+      await switchRoleAndVerify("Admin");
       setIsLocked(false);
       setError("");
     } else {
@@ -40,7 +50,8 @@ export default function AdminLayout({
             Admin Supply CMS
           </Link>
           <span className="text-xs text-emerald-200 hidden sm:inline">
-            · Screen 50–52 Bilingual Content Publisher
+            · Verified user_profiles.role:{" "}
+            <strong className="text-[#D4AF37]">{role}</strong>
           </span>
         </div>
 
@@ -74,6 +85,15 @@ export default function AdminLayout({
         <div className="flex items-center gap-2 text-xs">
           <button
             type="button"
+            onClick={() => verifyProfileRole()}
+            className="px-2.5 py-1.5 border border-emerald-700 hover:border-[#D4AF37] text-emerald-100 flex items-center gap-1 cursor-pointer"
+            title="Re-verify user_profiles.role against Supabase"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
+            <span className="hidden md:inline">RBAC: {role}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setIsLocked(true)}
             className="px-2.5 py-1.5 border border-emerald-700 hover:border-[#D4AF37] text-emerald-100 flex items-center gap-1 cursor-pointer"
             title="Lock Admin Studio"
@@ -95,6 +115,32 @@ export default function AdminLayout({
           </Link>
         </div>
       </header>
+
+      {/* Route-Level RBAC Verification Strip for /admin/* */}
+      {!adminAccessCheck.allowed && (
+        <div className="bg-amber-50 border-b border-amber-300 px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-950">
+          <div>
+            <strong>Route RBAC Guard (user_profiles.role):</strong>{" "}
+            {adminAccessCheck.reason}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => switchRoleAndVerify("Editorial Manager")}
+              className="px-3 py-1.5 bg-white border border-stone-900 text-stone-900 font-semibold cursor-pointer"
+            >
+              Verify as Editorial Manager
+            </button>
+            <button
+              type="button"
+              onClick={() => switchRoleAndVerify("Admin")}
+              className="px-3 py-1.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
+            >
+              Verify as Admin (Full Access)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Always render children segment so Next.js 16 instant navigation validation succeeds */}
       <main>{children}</main>
@@ -146,7 +192,7 @@ export default function AdminLayout({
                 className="w-full bg-[#064E3B] text-white font-semibold text-xs uppercase tracking-wider py-3.5 hover:bg-emerald-950 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <Unlock className="w-4 h-4 text-[#D4AF37]" />
-                <span>Unlock Admin Supply Studio</span>
+                <span>Unlock & Sync user_profiles.role = Admin</span>
               </button>
             </form>
             {error && (

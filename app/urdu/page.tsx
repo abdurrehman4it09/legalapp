@@ -5,11 +5,11 @@ import Link from "next/link";
 import Header from "../Header";
 import {
   createClient,
-  getTableData,
-  saveTableData,
   getSiteSettings,
   getCategoriesByScope,
   INITIAL_SITE_SETTINGS,
+  syncAllTablesFromSupabase,
+  getActiveRBACSession,
 } from "@/app/supabase";
 import {
   Scale,
@@ -66,33 +66,32 @@ export default function UrduHomePage() {
   const [probonoSubmitted, setProbonoSubmitted] = useState(false);
 
   async function loadAllData() {
-    const [articlesRes, lawsRes, lawyersRes] = await Promise.all([
-      supabase.from("articles").select("*").order("created_at", { ascending: false }),
-      supabase.from("laws").select("*").order("created_at", { ascending: false }),
-      supabase.from("lawyers").select("*").order("created_at", { ascending: false }),
-    ]);
+    const [articlesRes, lawsRes, lawyersRes, templatesRes, questionsRes] =
+      await Promise.all([
+        supabase.from("articles").select("*").order("created_at", { ascending: false }),
+        supabase.from("laws").select("*").order("created_at", { ascending: false }),
+        supabase.from("lawyers").select("*").order("created_at", { ascending: false }),
+        supabase.from("templates").select("*"),
+        supabase.from("questions").select("*"),
+      ]);
     if (articlesRes.data) setArticles(articlesRes.data);
     if (lawsRes.data) setLaws(lawsRes.data);
     if (lawyersRes.data) setLawyers(lawyersRes.data);
-    setTemplates(getTableData("templates"));
-    setQuestions(getTableData("questions"));
+    if (templatesRes.data) setTemplates(templatesRes.data);
+    if (questionsRes.data) setQuestions(questionsRes.data);
     setSiteSettings(getSiteSettings());
     setArticleCats(getCategoriesByScope("article"));
     setLoading(false);
   }
 
   useEffect(() => {
-    loadAllData();
+    syncAllTablesFromSupabase().then(() => loadAllData());
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("plp_user_session");
-      if (saved) {
-        try {
-          setUserSession(JSON.parse(saved));
-        } catch {
-          // ignore
-        }
-      }
-      const handleSync = () => loadAllData();
+      setUserSession(getActiveRBACSession());
+      const handleSync = () => {
+        setUserSession(getActiveRBACSession());
+        loadAllData();
+      };
       window.addEventListener("plp_data_updated", handleSync);
       return () => window.removeEventListener("plp_data_updated", handleSync);
     }
@@ -115,7 +114,7 @@ export default function UrduHomePage() {
   const leadArticle = filteredArticles[0] || articles[0];
   const secondaryArticles = filteredArticles.slice(1);
 
-  const handlePostUrduQuestion = (e: React.FormEvent) => {
+  const handlePostUrduQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userSession) {
       setAuthTriggerReason(
@@ -145,9 +144,8 @@ export default function UrduHomePage() {
           "آپ کا قانونی سوال ہائی کورٹ پینل کو موصول ہو گیا ہے۔ تمام اصل دستاویزات اور نادرا ریکارڈ محفوظ رکھیں۔",
       },
     };
-    const updated = [newQ, ...questions];
-    saveTableData("questions", updated);
-    setQuestions(updated);
+    await supabase.from("questions").insert([newQ]);
+    await loadAllData();
     setQuestionTitle("");
     setQuestionSuccess("آپ کا سوال کامیابی سے شائع کر دیا گیا ہے۔");
   };

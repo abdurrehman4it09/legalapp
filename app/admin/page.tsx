@@ -9,6 +9,15 @@ import {
   saveSiteSettings,
   getCategoriesByScope,
   resetAllPlatformData,
+  syncAllTablesFromSupabase,
+  RBACRole,
+  RBAC_ROLES,
+  RBAC_ROLE_PERMISSIONS,
+  normalizeRBACRole,
+  getRolePermissions,
+  getActiveRBACSession,
+  switchActiveRBACRole,
+  SyncedUserProfileSession,
 } from "@/app/supabase";
 import Link from "next/link";
 import {
@@ -27,6 +36,8 @@ import {
   Sparkles,
   Bell,
   Sliders,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 
 const supabase = createClient(
@@ -42,7 +53,8 @@ type AdminSection =
   | "crm_escrow"
   | "probono"
   | "ai_notifications"
-  | "masthead";
+  | "masthead"
+  | "users_rbac";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<AdminSection>("articles");
@@ -167,29 +179,79 @@ export default function AdminDashboard() {
   // 8. Site Masthead, Hero Engraving Plate & Escrow Wallet Settings (Screens 01, 02, 46)
   const [siteSettings, setSiteSettings] = useState<any>(() => getSiteSettings());
 
+  // 9. Users Profiles & 4-Role RBAC Manager (public.users_profiles)
+  const [usersProfiles, setUsersProfiles] = useState<any[]>([]);
+  const [activeSession, setActiveSession] =
+    useState<SyncedUserProfileSession | null>(null);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPhone, setNewUserPhone] = useState("+92 300 ");
+  const [newUserRole, setNewUserRole] = useState<RBACRole>("Client");
+  const [newUserCity, setNewUserCity] = useState("Islamabad");
+  const [newUserBarId, setNewUserBarId] = useState("");
+  const [newUserCourt, setNewUserCourt] = useState("Islamabad High Court");
+
   async function refreshAll() {
-    const { data } = await supabase
-      .from("articles")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (data) setArticles(data);
-    setAllCategories(getTableData("categories"));
-    setTemplates(getTableData("templates"));
-    setQuestions(getTableData("questions"));
-    setAppointments(getTableData("appointments"));
-    setCrmLeads(getTableData("crm_leads"));
-    setMilestones(getTableData("case_milestones"));
-    setNetworkPosts(getTableData("lawyer_network"));
-    setProbonoRequests(getTableData("probono_requests"));
-    setProbonoGuidelines(getTableData("probono_guidelines"));
-    setAiPrompts(getTableData("ai_prompts"));
-    setAiCitations(getTableData("ai_citations"));
-    setNotifications(getTableData("notifications"));
-    setSiteSettings(getSiteSettings());
+    await syncAllTablesFromSupabase();
+    const [
+      artRes,
+      catRes,
+      tplRes,
+      qRes,
+      appRes,
+      leadsRes,
+      msRes,
+      netRes,
+      pbReqRes,
+      pbGuideRes,
+      promptsRes,
+      citRes,
+      notifRes,
+      settingsRes,
+      usersRes,
+    ] = await Promise.all([
+      supabase.from("articles").select("*").order("created_at", { ascending: false }),
+      supabase.from("categories").select("*"),
+      supabase.from("templates").select("*"),
+      supabase.from("questions").select("*"),
+      supabase.from("appointments").select("*"),
+      supabase.from("crm_leads").select("*"),
+      supabase.from("case_milestones").select("*"),
+      supabase.from("lawyer_network").select("*"),
+      supabase.from("probono_requests").select("*"),
+      supabase.from("probono_guidelines").select("*"),
+      supabase.from("ai_prompts").select("*"),
+      supabase.from("ai_citations").select("*"),
+      supabase.from("notifications").select("*"),
+      supabase.from("site_settings").select("*"),
+      supabase.from("users_profiles").select("*"),
+    ]);
+
+    if (artRes.data) setArticles(artRes.data);
+    if (catRes.data) setAllCategories(catRes.data);
+    if (tplRes.data) setTemplates(tplRes.data);
+    if (qRes.data) setQuestions(qRes.data);
+    if (appRes.data) setAppointments(appRes.data);
+    if (leadsRes.data) setCrmLeads(leadsRes.data);
+    if (msRes.data) setMilestones(msRes.data);
+    if (netRes.data) setNetworkPosts(netRes.data);
+    if (pbReqRes.data) setProbonoRequests(pbReqRes.data);
+    if (pbGuideRes.data) setProbonoGuidelines(pbGuideRes.data);
+    if (promptsRes.data) setAiPrompts(promptsRes.data);
+    if (citRes.data) setAiCitations(citRes.data);
+    if (notifRes.data) setNotifications(notifRes.data);
+    if (settingsRes.data && settingsRes.data[0]) setSiteSettings(settingsRes.data[0]);
+    if (usersRes.data) setUsersProfiles(usersRes.data);
+    setActiveSession(getActiveRBACSession());
   }
 
   useEffect(() => {
     refreshAll();
+    if (typeof window !== "undefined") {
+      const onSync = () => setActiveSession(getActiveRBACSession());
+      window.addEventListener("plp_data_updated", onSync);
+      return () => window.removeEventListener("plp_data_updated", onSync);
+    }
   }, []);
 
   const flashBanner = (msg: string) => {
@@ -496,24 +558,85 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* 8-Tab Master Admin Control Bar */}
+      {/* Module 5 RBAC Role Enforcement Banner */}
+      <div className="p-4 bg-white border border-stone-300 flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="w-5 h-5 text-[#064E3B] shrink-0" />
+          <div>
+            <div className="font-bold text-stone-950">
+              Module 5 RBAC Status:{" "}
+              <span className="text-[#064E3B]">
+                {activeSession
+                  ? `${activeSession.name} (${activeSession.rbacRole})`
+                  : "Guest / Unauthenticated"}
+              </span>
+            </div>
+            <p className="text-stone-600 mt-0.5">
+              <strong>Editorial Manager</strong> unlocks Editorial Supply (Tabs 1, 2, 3, 8).{" "}
+              <strong>Admin</strong> unlocks all 9 Tabs including Escrow Overrides, Bar Roll Approvals &{" "}
+              <code>public.users_profiles</code> RBAC Manager.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {RBAC_ROLES.map((r) => {
+            const isCurrent = activeSession?.rbacRole === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={async () => {
+                  const synced = await switchActiveRBACRole(r);
+                  setActiveSession(synced);
+                  refreshAll();
+                  flashBanner(
+                    `Session & public.users_profiles synced to RBAC Role: ${r}`
+                  );
+                }}
+                className={`px-3 py-1.5 font-semibold border cursor-pointer ${
+                  isCurrent
+                    ? "bg-[#064E3B] text-white border-[#064E3B]"
+                    : "bg-stone-50 text-stone-800 border-stone-300 hover:border-[#064E3B]"
+                }`}
+              >
+                {isCurrent ? `Active: ${r}` : `Switch to ${r}`}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 9-Tab Master Admin Control Bar */}
       <div className="flex flex-wrap gap-1.5 p-1.5 bg-stone-200/80 border border-stone-300 text-xs font-semibold">
         {(
           [
-            { id: "articles", label: `1. Posts & Media (50–52) [${articles.length}]` },
-            { id: "categories", label: `2. Categories & Cities [${allCategories.length}]` },
-            { id: "templates", label: `3. Templates (08–09) [${templates.length}]` },
-            { id: "qa", label: `4. Q&A & Replies (10, 31, 43) [${questions.length}]` },
-            { id: "crm_escrow", label: `5. Escrow, Leads & CRM (22–49)` },
-            { id: "probono", label: `6. Pro-Bono & Guidelines (33–34, 48)` },
-            { id: "ai_notifications", label: `7. AI Prompts, Citations & Alerts (40–42, 57)` },
-            { id: "masthead", label: `8. Masthead, Splash & Hero Plate (01–02)` },
+            { id: "articles", label: `1. Posts & Media (50–52) [${articles.length}]`, editorialAllowed: true },
+            { id: "categories", label: `2. Categories & Cities [${allCategories.length}]`, editorialAllowed: true },
+            { id: "templates", label: `3. Templates (08–09) [${templates.length}]`, editorialAllowed: true },
+            { id: "qa", label: `4. Q&A & Replies (10, 31, 43) [${questions.length}]`, editorialAllowed: false },
+            { id: "crm_escrow", label: `5. Escrow, Leads & CRM (22–49)`, editorialAllowed: false },
+            { id: "probono", label: `6. Pro-Bono & Guidelines (33–34, 48)`, editorialAllowed: false },
+            { id: "ai_notifications", label: `7. AI Prompts, Citations & Alerts (40–42, 57)`, editorialAllowed: false },
+            { id: "masthead", label: `8. Masthead, Splash & Hero Plate (01–02)`, editorialAllowed: true },
+            { id: "users_rbac", label: `9. Users & RBAC Roles [${usersProfiles.length}]`, editorialAllowed: false },
           ] as const
         ).map((tab) => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              const perms = getRolePermissions(activeSession?.rbacRole || "Admin");
+              if (
+                activeSession &&
+                !perms.canManageFullAdminAndUsers &&
+                (!perms.canManageEditorialCMS || !tab.editorialAllowed)
+              ) {
+                flashBanner(
+                  `RBAC Notice: Tab "${tab.label}" requires Admin role (or Editorial Manager for Editorial tabs). Click "Switch to Admin" above to unlock.`
+                );
+              }
+              setActiveTab(tab.id);
+            }}
             className={`px-3.5 py-2.5 transition-colors cursor-pointer ${
               activeTab === tab.id
                 ? "bg-[#064E3B] text-white"
@@ -2114,6 +2237,218 @@ export default function AdminDashboard() {
             Save Masthead & Global Platform Settings
           </button>
         </form>
+      )}
+
+      {/* ======================================================================
+          TAB 9: USERS PROFILES & 4-ROLE RBAC MANAGER (public.users_profiles)
+          ====================================================================== */}
+      {activeTab === "users_rbac" && (
+        <div className="space-y-8">
+          <div className="bg-white border border-stone-300 p-6 sm:p-8 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-4">
+              <div>
+                <span className="text-xs uppercase tracking-widest text-[#064E3B] font-semibold block">
+                  Supabase Table: public.users_profiles · 4-Role RBAC & Bar Verification Engine
+                </span>
+                <h2 className="text-xl font-bold font-legal text-stone-950">
+                  Manage User Profiles & Sync Roles (Client, Verified Advocate, Editorial Manager, Admin)
+                </h2>
+              </div>
+              <Users className="w-6 h-6 text-[#B48327]" />
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newUserName.trim()) return;
+                const normalized = normalizeRBACRole(newUserRole);
+                const newRow = {
+                  id: Date.now(),
+                  email: newUserEmail || "user@legalbrief.pk",
+                  phone: newUserPhone,
+                  full_name: newUserName,
+                  role: normalized,
+                  city: newUserCity,
+                  language_pref: "en",
+                  theme_pref: "light",
+                  notifications_enabled: true,
+                  interested_categories: ["Property & Inheritance"],
+                  bar_council_id:
+                    normalized === "Verified Advocate" ? newUserBarId || "PBC-HC-2026" : "",
+                  high_court:
+                    normalized === "Verified Advocate" ? newUserCourt : "",
+                  bar_license_url:
+                    normalized === "Verified Advocate"
+                      ? `storage://bar-licenses/${newUserBarId || "PBC"}_License.pdf`
+                      : "",
+                  verification_status: "Verified",
+                  rbac_permissions: RBAC_ROLE_PERMISSIONS[normalized],
+                  deletion_requested: false,
+                  created_at: new Date().toISOString(),
+                };
+                await supabase.from("users_profiles").insert([newRow]);
+                setNewUserName("");
+                setNewUserEmail("");
+                refreshAll();
+                flashBanner(
+                  `User Profile "${newRow.full_name}" created in public.users_profiles with RBAC role: ${normalized}!`
+                );
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs bg-stone-50 p-4 border border-stone-200"
+            >
+              <input
+                type="text"
+                required
+                placeholder="Full Name..."
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                className="p-2.5 bg-white border border-stone-300"
+              />
+              <input
+                type="email"
+                placeholder="Email..."
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                className="p-2.5 bg-white border border-stone-300 font-mono-code"
+              />
+              <input
+                type="text"
+                placeholder="+92 Phone..."
+                value={newUserPhone}
+                onChange={(e) => setNewUserPhone(e.target.value)}
+                className="p-2.5 bg-white border border-stone-300 font-mono-code"
+              />
+              <select
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value as RBACRole)}
+                className="p-2.5 bg-white border border-stone-300 font-semibold"
+              >
+                {RBAC_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Bar ID (if Advocate)"
+                value={newUserBarId}
+                onChange={(e) => setNewUserBarId(e.target.value)}
+                className="p-2.5 bg-white border border-stone-300 font-mono-code"
+              />
+              <button
+                type="submit"
+                className="p-2.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
+              >
+                + Add Profile to Supabase
+              </button>
+            </form>
+
+            <div className="divide-y divide-stone-200 border border-stone-200">
+              {usersProfiles.map((u) => {
+                const currentRole = normalizeRBACRole(u.role);
+                const perm = RBAC_ROLE_PERMISSIONS[currentRole];
+                return (
+                  <div
+                    key={u.id}
+                    className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="text-sm font-legal text-stone-950">
+                          {u.full_name}
+                        </strong>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 font-mono-code font-semibold ${perm.badgeColor}`}
+                        >
+                          {currentRole} · Modules {perm.modules.join(", ")}
+                        </span>
+                        <span className="text-[11px] font-mono-code text-stone-500">
+                          [{u.verification_status || "Verified"}]
+                        </span>
+                      </div>
+                      <div className="text-xs text-stone-600 font-mono-code">
+                        {u.email || "No email"} · {u.phone || "No phone"} · {u.city}
+                        {u.bar_council_id ? ` · Bar ID: ${u.bar_council_id} (${u.high_court})` : ""}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <select
+                        value={currentRole}
+                        onChange={async (e) => {
+                          const nextRole = normalizeRBACRole(e.target.value);
+                          await supabase
+                            .from("users_profiles")
+                            .update({
+                              role: nextRole,
+                              rbac_permissions: RBAC_ROLE_PERMISSIONS[nextRole],
+                            })
+                            .eq("id", u.id);
+                          refreshAll();
+                          flashBanner(
+                            `Updated ${u.full_name}'s role in public.users_profiles to ${nextRole}`
+                          );
+                        }}
+                        className="px-2.5 py-1.5 border border-stone-300 bg-stone-50 font-semibold"
+                      >
+                        {RBAC_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            Role: {r}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={u.verification_status || "Verified"}
+                        onChange={async (e) => {
+                          await supabase
+                            .from("users_profiles")
+                            .update({ verification_status: e.target.value })
+                            .eq("id", u.id);
+                          refreshAll();
+                          flashBanner(
+                            `Updated verification status for ${u.full_name} to ${e.target.value}`
+                          );
+                        }}
+                        className="px-2.5 py-1.5 border border-stone-300 bg-white"
+                      >
+                        <option value="Verified">Verified</option>
+                        <option value="Under Review">Under Review</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const synced = await switchActiveRBACRole(currentRole);
+                          setActiveSession(synced);
+                          flashBanner(
+                            `Impersonating / Synced active session as ${u.full_name} (${currentRole})`
+                          );
+                        }}
+                        className="px-3 py-1.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
+                      >
+                        Use Role Session
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await supabase.from("users_profiles").delete().eq("id", u.id);
+                          refreshAll();
+                        }}
+                        className="px-2.5 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 font-semibold cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Screen 51: Insert Media / YouTube Link Modal */}

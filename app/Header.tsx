@@ -19,7 +19,15 @@ import {
   Master61ScreenExplorerModal,
   UserSession,
 } from "./components/PlatformModals";
-import { getSiteSettings, getTableData } from "./supabase";
+import {
+  getSiteSettings,
+  getTableData,
+  getActiveRBACSession,
+  switchActiveRBACRole,
+  RBAC_ROLES,
+  RBAC_ROLE_PERMISSIONS,
+  normalizeRBACRole,
+} from "./supabase";
 
 export default function Header({
   lang = "en",
@@ -44,6 +52,7 @@ export default function Header({
   const [langSheetOpen, setLangSheetOpen] = useState(false);
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [rbacModalOpen, setRbacModalOpen] = useState(false);
 
   const [theme, setTheme] = useState<"paper" | "light" | "dark">("paper");
   const [session, setSession] = useState<UserSession | null>(null);
@@ -54,18 +63,12 @@ export default function Header({
     const syncData = () => {
       setSiteSettings(getSiteSettings());
       setNotifications(getTableData("notifications"));
+      const active = getActiveRBACSession();
+      setSession(active);
     };
     syncData();
 
     if (typeof window !== "undefined") {
-      const savedSession = localStorage.getItem("plp_user_session");
-      if (savedSession) {
-        try {
-          setSession(JSON.parse(savedSession));
-        } catch {
-          // ignore
-        }
-      }
       const savedTheme = localStorage.getItem("plp_theme") as
         | "paper"
         | "light"
@@ -130,6 +133,7 @@ export default function Header({
   const handleLogout = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("plp_user_session");
+      window.dispatchEvent(new Event("plp_data_updated"));
     }
     setSession(null);
     setLogoutModalOpen(false);
@@ -293,6 +297,20 @@ export default function Header({
                   : theme === "light"
                   ? "Light"
                   : "Dark"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setRbacModalOpen(true)}
+              className="px-2.5 py-1 border border-[#064E3B]/40 bg-emerald-950/5 hover:bg-[#064E3B] hover:text-white text-[#064E3B] font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+              title="4-Role RBAC Profile Sync (public.users_profiles)"
+            >
+              <span>
+                RBAC:{" "}
+                {session
+                  ? normalizeRBACRole(session.rbacRole || session.role)
+                  : "Guest (M1)"}
               </span>
             </button>
 
@@ -579,6 +597,107 @@ export default function Header({
               >
                 Confirm Logout
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4-Role RBAC & Supabase users_profiles Sync Modal */}
+      {rbacModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4 font-ui"
+          onClick={() => setRbacModalOpen(false)}
+        >
+          <div
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-2xl p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-stone-300 pb-3">
+              <div>
+                <span className="text-[11px] uppercase tracking-widest text-[#064E3B] font-semibold block">
+                  Supabase Auth & public.users_profiles • 4-Role RBAC Enforcement Engine
+                </span>
+                <h3 className="text-lg font-bold font-legal text-stone-950">
+                  Active Role & Module Access Matrix (Modules 1–5)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRbacModalOpen(false)}
+                className="p-1 text-stone-500 hover:text-stone-900 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {RBAC_ROLES.map((r) => {
+                const perm = RBAC_ROLE_PERMISSIONS[r];
+                const isCurrent =
+                  session &&
+                  normalizeRBACRole(session.rbacRole || session.role) === r;
+                return (
+                  <div
+                    key={r}
+                    className={`p-4 border flex flex-col justify-between space-y-3 ${
+                      isCurrent
+                        ? "border-[#064E3B] bg-emerald-950/5"
+                        : "border-stone-300 bg-white"
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-stone-950">
+                          {perm.label_en}
+                        </span>
+                        <span className="font-mono-code text-[10px] px-2 py-0.5 bg-stone-900 text-white">
+                          Modules {perm.modules.join(", ")}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-600 leading-relaxed">
+                        {r === "Client" &&
+                          "Book Escrow Consultations, Post Anonymous Q&A, Pro-Bono Legal Aid & Basic AI Legal Assistant."}
+                        {r === "Verified Advocate" &&
+                          "Unlocks Advocate CRM (Screens 35–49), AI Researcher Pro (40), Private Lawyer Network & RAAST IBAN Withdrawals."}
+                        {r === "Editorial Manager" &&
+                          "Unlocks Bilingual News CMS (Screens 50–52), Categories, Templates & Masthead Supply."}
+                        {r === "Admin" &&
+                          "Full Super Admin Access across all 23 Supabase tables, Bar License Verification, Escrow Overrides & User RBAC Manager."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const synced = await switchActiveRBACRole(r);
+                        setSession(synced);
+                        setRbacModalOpen(false);
+                      }}
+                      className={`w-full py-2 text-xs font-semibold cursor-pointer ${
+                        isCurrent
+                          ? "bg-[#064E3B] text-white"
+                          : "bg-stone-900 hover:bg-[#064E3B] text-white"
+                      }`}
+                    >
+                      {isCurrent
+                        ? `Active in users_profiles (${r})`
+                        : `Sync Session & Profile as ${r} →`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-3 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-stone-600">
+                All role switches upsert directly into <code>public.users_profiles</code> and update module guards in real time.
+              </span>
+              <Link
+                href="/admin"
+                onClick={() => setRbacModalOpen(false)}
+                className="font-semibold text-[#064E3B] hover:underline"
+              >
+                Open Admin Users & RBAC Manager →
+              </Link>
             </div>
           </div>
         </div>

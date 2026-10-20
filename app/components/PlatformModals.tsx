@@ -33,16 +33,26 @@ import {
   Wallet,
   MessageSquare,
 } from "lucide-react";
-import { getTableData, saveTableData } from "@/app/supabase";
+import {
+  supabase,
+  getTableData,
+  saveTableData,
+  RBACRole,
+  RBAC_ROLE_PERMISSIONS,
+  normalizeRBACRole,
+} from "@/app/supabase";
+import { useAuthRBAC } from "@/app/AuthContext";
 
 export interface UserSession {
+  id?: number;
   phoneOrEmail: string;
-  role: "client" | "advocate";
+  role: "client" | "advocate" | "editorial_manager" | "admin";
+  rbacRole?: RBACRole;
   name: string;
   city: string;
   barCouncilId?: string;
   highCourt?: string;
-  verifiedStatus?: "verified" | "under_review";
+  verifiedStatus?: "verified" | "under_review" | "rejected";
 }
 
 /* ============================================================================
@@ -265,12 +275,15 @@ export function SmartAuthModal({
   lang?: "en" | "ur";
 }) {
   const isUr = lang === "ur";
+  const { loginAndVerifyRole, switchRoleAndVerify } = useAuthRBAC();
   const [step, setStep] = useState<
     "13_sheet" | "14_login" | "15_otp" | "16_role" | "17_client" | "18_lawyer" | "19_media" | "20_review"
   >("13_sheet");
   const [phoneOrEmail, setPhoneOrEmail] = useState("+92 300 5550199");
   const [otp, setOtp] = useState(["4", "8", "2", "9"]);
-  const [role, setRole] = useState<"client" | "advocate">("client");
+  const [role, setRole] = useState<
+    "client" | "advocate" | "editorial_manager" | "admin"
+  >("client");
   const [fullName, setFullName] = useState("");
   const [city, setCity] = useState("Islamabad");
   const [interests, setInterests] = useState<string[]>(["Property & Inheritance"]);
@@ -281,36 +294,61 @@ export function SmartAuthModal({
 
   if (!isOpen) return null;
 
-  const completeClientSetup = (e: React.FormEvent) => {
+  const completeClientSetup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const session: UserSession = {
+    const rbacRole: RBACRole =
+      role === "editorial_manager"
+        ? "Editorial Manager"
+        : role === "admin"
+        ? "Admin"
+        : "Client";
+    const defaultName =
+      rbacRole === "Editorial Manager"
+        ? "Zainab Qureshi (Editorial Manager)"
+        : rbacRole === "Admin"
+        ? "Justice (R) Tariq Mehmood (Admin)"
+        : isUr
+        ? "طارق محمود"
+        : "Tariq Mehmood";
+    const userName = fullName || defaultName;
+    const verifiedSession = await loginAndVerifyRole({
       phoneOrEmail,
-      role: "client",
-      name: fullName || (isUr ? "طارق محمود" : "Tariq Mehmood"),
+      fullName: userName,
+      role: rbacRole,
       city,
-      verifiedStatus: "verified",
-    };
-    if (typeof window !== "undefined") {
-      localStorage.setItem("plp_user_session", JSON.stringify(session));
-    }
-    onSuccess(session);
+      lang,
+      interests,
+      verificationStatus: "Verified",
+    });
+    onSuccess(verifiedSession);
     onClose();
   };
 
-  const finalizeLawyerSession = () => {
-    const session: UserSession = {
+  const finalizeLawyerSession = async () => {
+    const lawyerName = fullName || (isUr ? "ایڈووکیٹ حمزہ گیلانی" : "Adv. Hamza Gilani");
+    const uploadRes = await supabase.storage
+      .from("bar-licenses")
+      .upload(`${barCouncilId}_${licenseFile}`);
+    const verifiedSession = await loginAndVerifyRole({
       phoneOrEmail,
-      role: "advocate",
-      name: fullName || (isUr ? "ایڈووکیٹ حمزہ گیلانی" : "Adv. Hamza Gilani"),
+      fullName: lawyerName,
+      role: "Verified Advocate",
       city,
+      lang,
+      interests,
       barCouncilId,
       highCourt,
-      verifiedStatus: "verified",
-    };
-    if (typeof window !== "undefined") {
-      localStorage.setItem("plp_user_session", JSON.stringify(session));
-    }
-    onSuccess(session);
+      barLicenseUrl:
+        uploadRes?.data?.fullPath || `storage://bar-licenses/${licenseFile}`,
+      verificationStatus: "Verified",
+    });
+    onSuccess(verifiedSession);
+    onClose();
+  };
+
+  const handleQuickRoleSync = async (targetRole: RBACRole) => {
+    const verifiedSession = await switchRoleAndVerify(targetRole);
+    onSuccess(verifiedSession);
     onClose();
   };
 
@@ -400,8 +438,27 @@ export function SmartAuthModal({
 
           {step === "14_login" && (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
+                const isEmail = phoneOrEmail.includes("@");
+                const otpRes = await supabase.auth.signInWithOtp(
+                  isEmail ? { email: phoneOrEmail } : { phone: phoneOrEmail }
+                );
+                const matched = otpRes?.data?.matchedProfile;
+                if (matched) {
+                  setFullName(matched.full_name || "");
+                  setCity(matched.city || "Islamabad");
+                  const norm = normalizeRBACRole(matched.role);
+                  setRole(
+                    norm === "Verified Advocate"
+                      ? "advocate"
+                      : norm === "Editorial Manager"
+                      ? "editorial_manager"
+                      : norm === "Admin"
+                      ? "admin"
+                      : "client"
+                  );
+                }
                 setStep("15_otp");
               }}
               className="space-y-5"
@@ -434,6 +491,34 @@ export function SmartAuthModal({
               >
                 {isUr ? "تصدیقی کوڈ حاصل کریں (Screen 15)" : "Send 4-Digit OTP Code (Screen 15)"}
               </button>
+
+              {/* 1-Click Supabase users_profiles RBAC Demo Logins */}
+              <div className="pt-3 border-t border-stone-200 space-y-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                  {isUr
+                    ? "فوری 4-رول آربی اے سی پروفائل سنک (public.users_profiles)"
+                    : "1-Click RBAC Role Login (Synced with public.users_profiles)"}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      { role: "Client", label: "1. Client (M1–M3)" },
+                      { role: "Verified Advocate", label: "2. Verified Advocate (M1–M4)" },
+                      { role: "Editorial Manager", label: "3. Editorial Manager (CMS)" },
+                      { role: "Admin", label: "4. Admin (All M1–M5)" },
+                    ] as const
+                  ).map((preset) => (
+                    <button
+                      key={preset.role}
+                      type="button"
+                      onClick={() => handleQuickRoleSync(preset.role)}
+                      className="px-2.5 py-2 border border-stone-300 bg-white hover:border-[#064E3B] hover:bg-emerald-950/5 text-[11px] font-semibold text-stone-800 text-left cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </form>
           )}
 
@@ -482,28 +567,30 @@ export function SmartAuthModal({
             <div className="space-y-5">
               <div>
                 <div className="text-xs text-stone-500 mb-1">
-                  {isUr ? "اسکرین 16 • کردار کا انتخاب" : "Screen 16 • Role Selection Screen"}
+                  {isUr
+                    ? "اسکرین 16 • کردار کا انتخاب (4-Role RBAC)"
+                    : "Screen 16 • 4-Role RBAC Selection (Synced with public.users_profiles)"}
                 </div>
                 <h4 className="text-xl font-bold font-legal text-stone-900">
-                  {isUr ? "آپ کون ہیں؟" : "Select Your Workspace Role"}
+                  {isUr ? "اپنا کردار منتخب کریں" : "Select Your RBAC Workspace Role"}
                 </h4>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setRole("client");
                     setStep("17_client");
                   }}
-                  className="p-5 text-left border border-stone-300 bg-white hover:border-[#064E3B] cursor-pointer"
+                  className="p-4 text-left border border-stone-300 bg-white hover:border-[#064E3B] cursor-pointer"
                 >
-                  <UserCheck className="w-6 h-6 text-[#064E3B] mb-3" />
-                  <div className="font-bold text-sm text-stone-900">
-                    {isUr ? "میں ایک کلائنٹ ہوں" : "I am a Client"}
+                  <UserCheck className="w-5 h-5 text-[#064E3B] mb-2" />
+                  <div className="font-bold text-xs text-stone-900">
+                    {isUr ? "1. موکل / شہری (Client)" : "1. Client (Citizen)"}
                   </div>
-                  <p className="text-xs text-stone-600 mt-1">
-                    Opens Screen 17 Client Profile Setup Wizard
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Modules 1–3 · Book Escrow Consultations, Post Q&A, Pro-Bono Aid & Basic AI Assistant (Screen 17)
                   </p>
                 </button>
 
@@ -513,14 +600,50 @@ export function SmartAuthModal({
                     setRole("advocate");
                     setStep("18_lawyer");
                   }}
-                  className="p-5 text-left border border-stone-300 bg-white hover:border-[#064E3B] cursor-pointer"
+                  className="p-4 text-left border border-stone-300 bg-white hover:border-[#064E3B] cursor-pointer"
                 >
-                  <Scale className="w-6 h-6 text-[#B48327] mb-3" />
-                  <div className="font-bold text-sm text-stone-900">
-                    {isUr ? "میں ایک ایڈووکیٹ ہوں" : "I am an Advocate"}
+                  <Scale className="w-5 h-5 text-[#B48327] mb-2" />
+                  <div className="font-bold text-xs text-stone-900">
+                    {isUr ? "2. تصدیق شدہ ایڈووکیٹ (Verified Advocate)" : "2. Verified Advocate"}
                   </div>
-                  <p className="text-xs text-stone-600 mt-1">
-                    Opens Screen 18 Bar Council Verification Flow
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Modules 1–4 · Bar Council Verification, CRM Leads, AI Researcher Pro, Lawyer Network & IBAN Escrow (Screen 18)
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole("editorial_manager");
+                    setFullName("Zainab Qureshi (Editorial Manager)");
+                    setStep("17_client");
+                  }}
+                  className="p-4 text-left border border-stone-300 bg-white hover:border-[#B48327] cursor-pointer"
+                >
+                  <FileText className="w-5 h-5 text-[#B48327] mb-2" />
+                  <div className="font-bold text-xs text-stone-900">
+                    {isUr ? "3. ایڈیٹوریل مینیجر (Editorial Manager)" : "3. Editorial Manager"}
+                  </div>
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    Modules 1, 2 & 5 · Bilingual News CMS (Screens 50–52), Categories, Templates & Masthead Supply
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRole("admin");
+                    setFullName("Justice (R) Tariq Mehmood (Admin)");
+                    setStep("17_client");
+                  }}
+                  className="p-4 text-left border border-stone-300 bg-white hover:border-stone-950 cursor-pointer"
+                >
+                  <ShieldCheck className="w-5 h-5 text-stone-900 mb-2" />
+                  <div className="font-bold text-xs text-stone-900">
+                    {isUr ? "4. سپر ایڈمن (Admin)" : "4. Admin (Super Admin)"}
+                  </div>
+                  <p className="text-[11px] text-stone-600 mt-1">
+                    All Modules 1–5 · Full 23-Table Supabase Control, Bar Roll Approval, Escrow Overrides & RBAC Manager
                   </p>
                 </button>
               </div>
@@ -747,6 +870,7 @@ export function LegalAIWorkspaceModal({
   initialMode?: "assistant" | "researcher";
 }) {
   const isUr = lang === "ur";
+  const { checkModuleAccess, switchRoleAndVerify } = useAuthRBAC();
   const [mode, setMode] = useState<"assistant" | "researcher">(initialMode);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -780,18 +904,42 @@ export function LegalAIWorkspaceModal({
     setLoading(true);
 
     try {
-      const res = await fetch("/api/legal-ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: queryText, lang, mode }),
-      });
+      const [res, ragRes] = await Promise.all([
+        fetch("/api/legal-ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: queryText, lang, mode }),
+        }),
+        supabase.rpc("match_legal_documents", {
+          query_text: queryText,
+          match_count: 3,
+        }),
+      ]);
       const data = await res.json();
+      const matchedCitations =
+        data.citations ||
+        (ragRes?.data?.length ? ragRes.data : getTableData("ai_citations"));
+      const answerText = data.text || "Unable to retrieve statutory analysis.";
+
       setMessages((prev) => [
         ...prev,
         {
           role: "ai",
-          text: data.text || "Unable to retrieve statutory analysis.",
-          citations: data.citations || getTableData("ai_citations"),
+          text: answerText,
+          citations: matchedCitations,
+        },
+      ]);
+
+      await supabase.from("ai_chat_histories").insert([
+        {
+          user_role: mode === "researcher" ? "Verified Lawyer" : "Client",
+          mode,
+          query: queryText,
+          response: answerText,
+          ocr_attachment_url: showAttachMenu
+            ? "storage://ocr-documents/Attached_Legal_Instrument.pdf"
+            : "",
+          citations_used: matchedCitations.map((c: any) => c.code),
         },
       ]);
     } catch {
@@ -876,6 +1024,26 @@ export function LegalAIWorkspaceModal({
             </button>
           </div>
         </div>
+
+        {/* RBAC Role Verification Notice for Screen 40 AI Researcher Pro */}
+        {mode === "researcher" &&
+          !checkModuleAccess("ai_researcher_pro").allowed && (
+            <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-300 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-950 shrink-0">
+              <span>
+                <strong>RBAC Guard (Module 4 • Screen 40):</strong>{" "}
+                {checkModuleAccess("ai_researcher_pro").reason}
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await switchRoleAndVerify("Verified Advocate");
+                }}
+                className="px-3 py-1 bg-[#064E3B] text-white font-semibold cursor-pointer"
+              >
+                Verify user_profiles.role → Verified Advocate
+              </button>
+            </div>
+          )}
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
           <div
@@ -1295,14 +1463,17 @@ export function BookingEscrowModal({
 
   if (!lawyer) return null;
 
-  const confirmBooking = () => {
+  const confirmBooking = async () => {
     if (!userSession) {
       onRequireAuth();
       return;
     }
-    const existing = getTableData("appointments");
+    const grossFee = Number(lawyer.fee) || 3500;
+    const platformCommission = Math.round(grossFee * 0.15);
+    const lawyerShare = grossFee - platformCommission;
+    const roomId = `VIDEO-CHAMBER-${lawyer.id || 901}`;
+
     const newAppt = {
-      id: Date.now(),
       lawyer_id: lawyer.id,
       lawyer_name: lawyer.name,
       lawyer_name_urdu: lawyer.name_urdu || lawyer.name,
@@ -1310,13 +1481,31 @@ export function BookingEscrowModal({
       client_name: userSession.name,
       date: selectedDate,
       time_slot: selectedSlot,
-      fee: lawyer.fee || 3500,
+      fee: grossFee,
+      escrow_amount: lawyerShare,
+      platform_commission: platformCommission,
       payment_method: `${paymentMethod} Escrow`,
-      status: "Active",
+      video_room_id: roomId,
+      status: "Escrow Locked",
       case_summary: caseBrief || "Legal consultation & document review.",
-      escrow_id: `ESC-PK-${Math.floor(10000 + Math.random() * 90000)}`,
     };
-    saveTableData("appointments", [newAppt, ...existing]);
+
+    await Promise.all([
+      supabase.from("appointments").insert([newAppt]),
+      supabase.from("escrow_ledger").insert([
+        {
+          appointment_id: lawyer.id || 901,
+          client_name: userSession.name,
+          lawyer_name: lawyer.name,
+          gross_amount_pkr: grossFee,
+          lawyer_share_pkr: lawyerShare,
+          platform_fee_pkr: platformCommission,
+          payment_gateway: paymentMethod,
+          accounting_state: "Funds Held in Escrow",
+          milestone_label: caseBrief || "Initial Video Consultation Retainer",
+        },
+      ]),
+    ]);
     setStep("25_success");
   };
 
@@ -1630,7 +1819,19 @@ export function BookingEscrowModal({
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={async () => {
+                  await supabase.from("video_consultation_logs").insert([
+                    {
+                      room_id: `VIDEO-CHAMBER-${lawyer.id || 901}`,
+                      lawyer_name: lawyer.name,
+                      client_name: userSession?.name || "Verified Client",
+                      duration_minutes: 30,
+                      post_call_rating: rating,
+                      client_review: `Completed video consultation (${rating}/5 stars) — Escrow milestone verified.`,
+                    },
+                  ]);
+                  onClose();
+                }}
                 className="w-full py-2.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
               >
                 Release Escrow & Submit Rating

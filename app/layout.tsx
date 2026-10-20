@@ -1,5 +1,6 @@
 import "./globals.css";
 import React from "react";
+import { AuthRBACProvider } from "./AuthContext";
 
 export const metadata = {
   title: "The Daily Legal Brief",
@@ -26,7 +27,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen antialiased selection:bg-emerald-900 selection:text-white">
-        {children}
+        <AuthRBACProvider>{children}</AuthRBACProvider>
       </body>
     </html>
   );
