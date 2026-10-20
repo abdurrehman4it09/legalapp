@@ -1,119 +1,351 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { createClient } from '@/app/supabase'
-import Link from 'next/link'
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { createClient } from "@/app/supabase";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-)
+);
 
 export default function AdminLawyers() {
-  const [lawyers, setLawyers] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [newLawyer, setNewLawyer] = useState({ name: '', specialty: '', location: '', contact_info: '', bio: '', image_url: '' })
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => { fetchLawyers() }, [])
+  const [lawyers, setLawyers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [newLawyer, setNewLawyer] = useState({
+    name: "",
+    name_urdu: "",
+    court: "Supreme Court / High Court",
+    court_urdu: "سپریم کورٹ / ہائی کورٹ",
+    specialty: "",
+    specialty_urdu: "",
+    location: "Islamabad",
+    city_urdu: "اسلام آباد",
+    fee: 3500,
+    bar_council_id: "PBC-HC-2026-9012",
+    contact_info: "",
+    bio: "",
+    intro_urdu: "",
+    is_female: false,
+    pro_bono: true,
+  });
+  const [saving, setSaving] = useState(false);
 
   async function fetchLawyers() {
-    setLoading(true)
-    const { data, error } = await supabase.from('lawyers').select('*').order('created_at', { ascending: false })
-    if (!error && data) setLawyers(data)
-    setLoading(false)
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("lawyers")
+      .select("*")
+      .order("created_at", { ascending: false });
+      if (!error && data) setLawyers(data);
+    setLoading(false);
   }
 
+  useEffect(() => {
+    fetchLawyers();
+  }, []);
+
   async function handleSaveLawyer(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault();
+    setSaving(true);
+    const payload = {
+      ...newLawyer,
+      city: newLawyer.location,
+      fee: Number(newLawyer.fee) || 3500,
+      verified: true,
+    };
     let error;
     if (editingId) {
-      const { error: updateError } = await supabase.from('lawyers').update(newLawyer).eq('id', editingId)
-      error = updateError
+      const { error: updateError } = await supabase
+        .from("lawyers")
+        .update(payload)
+        .eq("id", editingId);
+      error = updateError;
     } else {
-      const { error: insertError } = await supabase.from('lawyers').insert([newLawyer])
-      error = insertError
+      const { error: insertError } = await supabase
+        .from("lawyers")
+        .insert([payload]);
+      error = insertError;
     }
-    setSaving(false)
-    if (!error) { resetForm(); fetchLawyers() } else { alert('Failed to save lawyer.') }
+    setSaving(false);
+    if (!error) {
+      setStatusMessage(
+        editingId
+          ? "Advocate profile updated on English & Urdu directories."
+          : "Verified Advocate enrolled into directory."
+      );
+      resetForm();
+      fetchLawyers();
+    } else {
+      setStatusMessage("Failed to save advocate profile.");
+    }
   }
 
   function handleEdit(lawyer: any) {
-    setEditingId(lawyer.id)
+    setEditingId(lawyer.id);
     setNewLawyer({
-      name: lawyer.name || '', specialty: lawyer.specialty || '',
-      location: lawyer.location || '', contact_info: lawyer.contact_info || '',
-      bio: lawyer.bio || '', image_url: lawyer.image_url || ''
-    })
-    setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+      name: lawyer.name || "",
+      name_urdu: lawyer.name_urdu || "",
+      court: lawyer.court || "High Court",
+      court_urdu: lawyer.court_urdu || "ہائی کورٹ",
+      specialty: lawyer.specialty || "",
+      specialty_urdu: lawyer.specialty_urdu || "",
+      location: lawyer.location || "Islamabad",
+      city_urdu: lawyer.city_urdu || "اسلام آباد",
+      fee: lawyer.fee || 3500,
+      bar_council_id: lawyer.bar_council_id || "PBC-HC-Verified",
+      contact_info: lawyer.contact_info || "",
+      bio: lawyer.bio || "",
+      intro_urdu: lawyer.intro_urdu || "",
+      is_female: Boolean(lawyer.is_female),
+      pro_bono: Boolean(lawyer.pro_bono),
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function resetForm() { setShowForm(false); setEditingId(null); setNewLawyer({ name: '', specialty: '', location: '', contact_info: '', bio: '', image_url: '' }) }
+  function resetForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setNewLawyer({
+      name: "",
+      name_urdu: "",
+      court: "Supreme Court / High Court",
+      court_urdu: "سپریم کورٹ / ہائی کورٹ",
+      specialty: "",
+      specialty_urdu: "",
+      location: "Islamabad",
+      city_urdu: "اسلام آباد",
+      fee: 3500,
+      bar_council_id: "PBC-HC-2026-9012",
+      contact_info: "",
+      bio: "",
+      intro_urdu: "",
+      is_female: false,
+      pro_bono: true,
+    });
+  }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this profile?')) return
-    await supabase.from('lawyers').delete().eq('id', id); fetchLawyers()
+    await supabase.from("lawyers").delete().eq("id", id);
+    fetchLawyers();
   }
 
   return (
-    <div className="flex min-h-screen bg-white text-gray-900 font-sans border-t-4 border-emerald-800">
-      {/* Persistent Sidebar */}
-      <div className="w-64 border-r border-gray-100 p-8 h-full fixed bg-white">
-        <h2 className="text-xl font-bold mb-12 tracking-tight">Admin<span className="text-emerald-800">.</span></h2>
-        <ul className="space-y-6 text-sm font-bold text-gray-400 uppercase tracking-widest">
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin">Post News</Link></li>
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin/laws">Manage Laws</Link></li>
-          <li className="text-emerald-800 border-b-2 border-emerald-800 inline-block pb-1">Manage Lawyers</li>
-        </ul>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 p-12 ml-64 max-w-5xl">
-        <div className="flex justify-between items-center mb-12 border-b border-gray-100 pb-6">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Manage Lawyer Directory</h1>
-          <button onClick={() => showForm ? resetForm() : setShowForm(true)} className="bg-emerald-800 text-white px-6 py-2 rounded font-bold tracking-wider hover:bg-emerald-900 transition">
-            {showForm ? 'Cancel' : '+ Add Lawyer'}
-          </button>
+    <div className="max-w-7xl mx-auto p-6 sm:p-10 space-y-8">
+      <div className="flex flex-wrap justify-between items-end gap-4 border-b-2 border-stone-900 pb-6">
+        <div>
+          <span className="text-xs uppercase tracking-widest text-[#064E3B] font-semibold block mb-1">
+            Screens 06, 07 & 18 Supply · Bar Council Verification Roll
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-bold font-legal text-stone-950">
+            Manage Verified Advocate Directory
+          </h1>
         </div>
-
-        {showForm && (
-          <form onSubmit={handleSaveLawyer} className="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-8 shadow-inner">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{editingId ? 'Edit Lawyer Profile' : 'Add a New Lawyer'}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <input required placeholder="Full Name" className="p-3 border rounded-md" value={newLawyer.name} onChange={e => setNewLawyer({...newLawyer, name: e.target.value})} />
-              <input placeholder="Specialty (e.g., Corporate Law)" className="p-3 border rounded-md" value={newLawyer.specialty} onChange={e => setNewLawyer({...newLawyer, specialty: e.target.value})} />
-              <input placeholder="City / Location" className="p-3 border rounded-md" value={newLawyer.location} onChange={e => setNewLawyer({...newLawyer, location: e.target.value})} />
-              <input placeholder="Contact Info (Email/Phone)" className="p-3 border rounded-md" value={newLawyer.contact_info} onChange={e => setNewLawyer({...newLawyer, contact_info: e.target.value})} />
-              <input placeholder="Image URL (Optional)" className="p-3 border rounded-md md:col-span-2" value={newLawyer.image_url} onChange={e => setNewLawyer({...newLawyer, image_url: e.target.value})} />
-              <textarea placeholder="Professional Biography" className="p-3 border rounded-md h-24 md:col-span-2" value={newLawyer.bio} onChange={e => setNewLawyer({...newLawyer, bio: e.target.value})} />
-            </div>
-            <button type="submit" disabled={saving} className="bg-emerald-800 text-white px-6 py-2 rounded-md font-medium w-full md:w-auto">
-              {saving ? 'Saving...' : (editingId ? 'Update Profile' : 'Save Profile')}
-            </button>
-          </form>
-        )}
-
-        {loading ? <p className="text-emerald-800 font-medium animate-pulse">Loading directory profiles...</p> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lawyers.map((lawyer) => (
-              <div key={lawyer.id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
-                <div className="h-24 w-24 rounded-full bg-gray-200 mb-4 overflow-hidden border-2 border-emerald-800">
-                  {lawyer.image_url ? <img src={lawyer.image_url} alt={lawyer.name} className="h-full w-full object-cover" /> : <div className="h-full w-full flex items-center justify-center text-gray-400 font-bold text-2xl">{lawyer.name ? lawyer.name.charAt(0) : '?'}</div>}
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">{lawyer.name || 'Unknown Name'}</h3>
-                <p className="text-sm text-gray-500 mb-4">{lawyer.specialty || 'General Practice'}</p>
-                <div className="mt-auto flex space-x-3 w-full">
-                  <button onClick={() => handleEdit(lawyer)} className="flex-1 bg-gray-50 text-gray-700 py-2 rounded-md hover:bg-gray-100 text-sm font-bold transition-colors">Edit</button>
-                  <button onClick={() => handleDelete(lawyer.id)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-md hover:bg-red-100 text-sm font-bold transition-colors">Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => (showForm ? resetForm() : setShowForm(true))}
+          className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 transition cursor-pointer"
+        >
+          {showForm ? "Cancel" : "+ Enroll Verified Advocate"}
+        </button>
       </div>
+
+      {statusMessage && (
+        <div className="p-3 bg-emerald-950/5 border border-[#064E3B] text-xs font-semibold text-[#064E3B]">
+          {statusMessage}
+        </div>
+      )}
+
+      {showForm && (
+        <form
+          onSubmit={handleSaveLawyer}
+          className="bg-white p-6 sm:p-8 border border-stone-300 space-y-4"
+        >
+          <h2 className="text-lg font-bold font-legal text-stone-950">
+            {editingId
+              ? "Edit Advocate Credentials"
+              : "Enroll New Advocate (English & Urdu)"}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              required
+              placeholder="Full Name (e.g., Adv. Sara Mansoor)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs"
+              value={newLawyer.name}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, name: e.target.value })
+              }
+            />
+            <input
+              placeholder="اردو نام (مثلاً ایڈووکیٹ سارہ منصور)"
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 text-sm font-urdu"
+              value={newLawyer.name_urdu}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, name_urdu: e.target.value })
+              }
+            />
+            <input
+              placeholder="Specialty (e.g., Property & Constitutional Law)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs"
+              value={newLawyer.specialty}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, specialty: e.target.value })
+              }
+            />
+            <input
+              placeholder="اردو مہارت (مثلاً جائیداد اور آئینی قوانین)"
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 text-sm font-urdu"
+              value={newLawyer.specialty_urdu}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, specialty_urdu: e.target.value })
+              }
+            />
+            <input
+              placeholder="City (e.g., Islamabad / Lahore)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs"
+              value={newLawyer.location}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, location: e.target.value })
+              }
+            />
+            <input
+              placeholder="اردو شہر (مثلاً اسلام آباد)"
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 text-sm font-urdu"
+              value={newLawyer.city_urdu}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, city_urdu: e.target.value })
+              }
+            />
+            <input
+              type="number"
+              placeholder="Escrow Consultation Fee (PKR)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-mono-code"
+              value={newLawyer.fee}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, fee: Number(e.target.value) })
+              }
+            />
+            <input
+              placeholder="Bar Council License ID"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-mono-code"
+              value={newLawyer.bar_council_id}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, bar_council_id: e.target.value })
+              }
+            />
+            <textarea
+              placeholder="English Chamber Biography..."
+              className="p-3 bg-stone-50 border border-stone-300 h-24 text-xs"
+              value={newLawyer.bio}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, bio: e.target.value })
+              }
+            />
+            <textarea
+              placeholder="اردو تعارف..."
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 h-24 text-sm font-urdu"
+              value={newLawyer.intro_urdu}
+              onChange={(e) =>
+                setNewLawyer({ ...newLawyer, intro_urdu: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-6 py-2 text-xs font-semibold text-stone-800">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newLawyer.is_female}
+                onChange={(e) =>
+                  setNewLawyer({ ...newLawyer, is_female: e.target.checked })
+                }
+              />
+              <span>Female Advocate (Screen 07 Filter)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newLawyer.pro_bono}
+                onChange={(e) =>
+                  setNewLawyer({ ...newLawyer, pro_bono: e.target.checked })
+                }
+              />
+              <span>Available for Pro-Bono Legal Aid (Screen 07 & 33)</span>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+          >
+            {saving
+              ? "Saving..."
+              : editingId
+              ? "Update Advocate Profile"
+              : "Enroll Advocate"}
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-stone-500 text-xs">Loading directory profiles...</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {lawyers.map((lawyer) => (
+            <div
+              key={lawyer.id}
+              className="bg-white p-6 border border-stone-300 flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 bg-[#064E3B] text-[#D4AF37] font-legal font-bold text-lg flex items-center justify-center border border-[#B48327]">
+                    {lawyer.name ? lawyer.name.replace("Adv. ", "").charAt(0) : "A"}
+                  </div>
+                  <div>
+                    <h3 className="font-bold font-legal text-stone-950 text-base">
+                      {lawyer.name}
+                    </h3>
+                    <p className="font-urdu text-sm text-stone-600" dir="rtl">
+                      {lawyer.name_urdu}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-[#064E3B] font-semibold mb-1">
+                  {lawyer.specialty}
+                </p>
+                <p className="text-xs text-stone-500 font-mono-code mb-4">
+                  {lawyer.location} · PKR {(lawyer.fee || 3500).toLocaleString()}
+                </p>
+              </div>
+              <div className="pt-4 border-t border-stone-200 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleEdit(lawyer)}
+                  className="flex-1 py-2 border border-stone-300 text-xs font-semibold text-stone-800 hover:border-stone-900 cursor-pointer"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(lawyer.id)}
+                  className="flex-1 py-2 border border-red-200 text-xs font-semibold text-red-700 hover:bg-red-50 cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  )
+  );
 }

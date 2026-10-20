@@ -3,16 +3,32 @@
 /* 1. Default English Legal & Magazine Font (Libre Baskerville) */
 body {
   font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif;
-  background-color: #FFFFFF;
+  background-color: #FBF9F5;
   color: #111111;
   -webkit-font-smoothing: antialiased;
   margin: 0;
   padding: 0;
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
-/* Clean Sans-Serif Font for Buttons, Menus & Admin Controls */
+html.theme-light body {
+  background-color: #FFFFFF;
+  color: #0A0A0A;
+}
+
+html.theme-paper body {
+  background-color: #FBF9F5;
+  color: #141210;
+}
+
+html.theme-dark body {
+  background-color: #0C0E0D;
+  color: #F3F2EE;
+}
+
+/* Clean Sans-Serif Font for Buttons, Menus & Admin Controls (Plus Jakarta Sans) */
 .font-ui {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Classic Legal Document Serif Font */
@@ -20,18 +36,41 @@ body {
   font-family: 'Libre Baskerville', Georgia, serif;
 }
 
+/* Monospace for Case Citations, Statutory Sections & PKR Amounts */
+.font-mono-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 2. Authentic Urdu Font (Noto Nastaliq Urdu) with proper line spacing */
 .font-urdu {
-  font-family: 'Noto Nastaliq Urdu', serif !important;
-  line-height: 2.4 !important;
+  font-family: 'Noto Nastaliq Urdu', 'Libre Baskerville', serif !important;
+  line-height: 2.35 !important;
 }
 
 /* New York Times / Medium Drop-Cap for Article First Letters */
 .drop-cap::first-letter {
   float: left;
-  font-size: 3.5rem;
-  line-height: 0.85;
-  padding-top: 4px;
-  padding-right: 12px;
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 3.75rem;
+  line-height: 0.82;
+  padding-top: 6px;
+  padding-right: 14px;
+  padding-bottom: 4px;
   font-weight: 700;
+  color: #064E3B;
+}
+
+html.theme-dark .drop-cap::first-letter {
+  color: #10B981;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
 }

@@ -1,130 +1,306 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { createClient } from '@/app/supabase'
-import Link from 'next/link'
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { createClient } from "@/app/supabase";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-)
+);
 
 export default function AdminLaws() {
-  const [laws, setLaws] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [newLaw, setNewLaw] = useState({ title: '', title_urdu: '', category: '', content: '', content_urdu: '' })
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => { fetchLaws() }, [])
+  const [laws, setLaws] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [newLaw, setNewLaw] = useState({
+    title: "",
+    title_urdu: "",
+    category: "Constitution",
+    section_number: "",
+    section_urdu: "",
+    content: "",
+    content_urdu: "",
+    marginal_notes: "",
+    marginal_notes_urdu: "",
+  });
+  const [saving, setSaving] = useState(false);
 
   async function fetchLaws() {
-    setLoading(true)
-    const { data, error } = await supabase.from('laws').select('*').order('created_at', { ascending: false })
-    if (!error && data) setLaws(data)
-    setLoading(false)
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("laws")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) setLaws(data);
+    setLoading(false);
   }
 
+  useEffect(() => {
+    fetchLaws();
+  }, []);
+
   async function handleSaveLaw(e: React.FormEvent) {
-    e.preventDefault()
-    setSaving(true)
+    e.preventDefault();
+    setSaving(true);
     let error;
     if (editingId) {
-      const { error: updateError } = await supabase.from('laws').update(newLaw).eq('id', editingId)
-      error = updateError
+      const { error: updateError } = await supabase
+        .from("laws")
+        .update(newLaw)
+        .eq("id", editingId);
+      error = updateError;
     } else {
-      const { error: insertError } = await supabase.from('laws').insert([newLaw])
-      error = insertError
+      const { error: insertError } = await supabase
+        .from("laws")
+        .insert([newLaw]);
+      error = insertError;
     }
-    setSaving(false)
-    if (!error) { resetForm(); fetchLaws() } else { alert('Failed to save law.') }
+    setSaving(false);
+    if (!error) {
+      setStatusMessage(
+        editingId
+          ? "Statute updated across English & Urdu libraries."
+          : "New statute added to Digital Law Library."
+      );
+      resetForm();
+      fetchLaws();
+    } else {
+      setStatusMessage("Error saving statute.");
+    }
   }
 
   function handleEdit(law: any) {
-    setEditingId(law.id)
+    setEditingId(law.id);
     setNewLaw({
-      title: law.title || '', title_urdu: law.title_urdu || '',
-      category: law.category || '', content: law.content || '', content_urdu: law.content_urdu || ''
-    })
-    setShowForm(true)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+      title: law.title || "",
+      title_urdu: law.title_urdu || "",
+      category: law.category || "Constitution",
+      section_number: law.section_number || "",
+      section_urdu: law.section_urdu || "",
+      content: law.content || "",
+      content_urdu: law.content_urdu || "",
+      marginal_notes: law.marginal_notes || "",
+      marginal_notes_urdu: law.marginal_notes_urdu || "",
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function resetForm() { setShowForm(false); setEditingId(null); setNewLaw({ title: '', title_urdu: '', category: '', content: '', content_urdu: '' }) }
+  function resetForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setNewLaw({
+      title: "",
+      title_urdu: "",
+      category: "Constitution",
+      section_number: "",
+      section_urdu: "",
+      content: "",
+      content_urdu: "",
+      marginal_notes: "",
+      marginal_notes_urdu: "",
+    });
+  }
 
   async function handleDelete(id: number) {
-    if (!confirm('Delete this law?')) return
-    await supabase.from('laws').delete().eq('id', id); fetchLaws()
+    await supabase.from("laws").delete().eq("id", id);
+    fetchLaws();
   }
 
   return (
-    <div className="flex min-h-screen bg-white text-gray-900 font-sans border-t-4 border-emerald-800">
-      {/* Persistent Sidebar */}
-      <div className="w-64 border-r border-gray-100 p-8 h-full fixed bg-white">
-        <h2 className="text-xl font-bold mb-12 tracking-tight">Admin<span className="text-emerald-800">.</span></h2>
-        <ul className="space-y-6 text-sm font-bold text-gray-400 uppercase tracking-widest">
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin">Post News</Link></li>
-          <li className="text-emerald-800 border-b-2 border-emerald-800 inline-block pb-1">Manage Laws</li>
-          <li className="hover:text-emerald-800 transition cursor-pointer"><Link href="/admin/lawyers">Manage Lawyers</Link></li>
-        </ul>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 p-12 ml-64 max-w-5xl">
-        <div className="flex justify-between items-center mb-12 border-b border-gray-100 pb-6">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900">Manage Legal Library</h1>
-          <button onClick={() => showForm ? resetForm() : setShowForm(true)} className="bg-emerald-800 text-white px-6 py-2 rounded font-bold tracking-wider hover:bg-emerald-900 transition">
-            {showForm ? 'Cancel' : '+ Add New Law'}
-          </button>
+    <div className="max-w-7xl mx-auto p-6 sm:p-10 space-y-8">
+      <div className="flex flex-wrap justify-between items-end gap-4 border-b-2 border-stone-900 pb-6">
+        <div>
+          <span className="text-xs uppercase tracking-widest text-[#064E3B] font-semibold block mb-1">
+            Screens 11–12 Supply · Sovereign Statute Repository
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-bold font-legal text-stone-950">
+            Manage Digital Law Library
+          </h1>
         </div>
-
-        {showForm && (
-          <form onSubmit={handleSaveLaw} className="bg-gray-50 p-6 rounded-xl border border-gray-200 mb-8 shadow-inner">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{editingId ? 'Edit Law' : 'Add a New Law'}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <input required placeholder="English Title" className="p-3 border rounded-md" value={newLaw.title} onChange={e => setNewLaw({...newLaw, title: e.target.value})} />
-              <input placeholder="Urdu Title (اردو)" className="p-3 border rounded-md text-right" dir="rtl" value={newLaw.title_urdu} onChange={e => setNewLaw({...newLaw, title_urdu: e.target.value})} />
-              <input placeholder="Category (e.g., Constitution)" className="p-3 border rounded-md md:col-span-2" value={newLaw.category} onChange={e => setNewLaw({...newLaw, category: e.target.value})} />
-              <textarea placeholder="English Content" className="p-3 border rounded-md h-32" value={newLaw.content} onChange={e => setNewLaw({...newLaw, content: e.target.value})} />
-              <textarea placeholder="Urdu Content (اردو)" className="p-3 border rounded-md h-32 text-right" dir="rtl" value={newLaw.content_urdu} onChange={e => setNewLaw({...newLaw, content_urdu: e.target.value})} />
-            </div>
-            <button type="submit" disabled={saving} className="bg-emerald-800 text-white px-6 py-2 rounded-md font-medium w-full md:w-auto">
-              {saving ? 'Saving...' : (editingId ? 'Update Law' : 'Save Law to Database')}
-            </button>
-          </form>
-        )}
-
-        {loading ? <p className="text-emerald-800 font-medium animate-pulse">Loading legal records...</p> : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title / Title (Urdu)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {laws.map((law) => (
-                  <tr key={law.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{law.title || 'Untitled'}</div>
-                      <div className="text-sm text-gray-500" dir="rtl">{law.title_urdu || ''}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">{law.category || 'General'}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
-                      <button onClick={() => handleEdit(law)} className="text-emerald-600 hover:text-emerald-900 font-bold">Edit</button>
-                      <button onClick={() => handleDelete(law.id)} className="text-red-600 hover:text-red-900 font-bold">Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => (showForm ? resetForm() : setShowForm(true))}
+          className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 transition cursor-pointer"
+        >
+          {showForm ? "Cancel" : "+ Add New Statute / Act"}
+        </button>
       </div>
+
+      {statusMessage && (
+        <div className="p-3 bg-emerald-950/5 border border-[#064E3B] text-xs font-semibold text-[#064E3B]">
+          {statusMessage}
+        </div>
+      )}
+
+      {showForm && (
+        <form
+          onSubmit={handleSaveLaw}
+          className="bg-white p-6 sm:p-8 border border-stone-300 space-y-4"
+        >
+          <h2 className="text-lg font-bold font-legal text-stone-950">
+            {editingId ? "Edit Codified Statute" : "Add Codified Statute (English & Urdu)"}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <select
+              value={newLaw.category}
+              onChange={(e) => setNewLaw({ ...newLaw, category: e.target.value })}
+              className="p-3 bg-stone-50 border border-stone-300 text-xs"
+            >
+              <option value="Constitution">Constitution</option>
+              <option value="Pakistan Penal Code">Pakistan Penal Code</option>
+              <option value="Act">Act</option>
+              <option value="Judgment">Judgment</option>
+            </select>
+            <input
+              placeholder="Section / Article Ref (e.g., Article 10A)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-mono-code"
+              value={newLaw.section_number}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, section_number: e.target.value })
+              }
+            />
+            <input
+              placeholder="اردو دفعہ / آرٹیکل نمبر"
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-urdu"
+              value={newLaw.section_urdu}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, section_urdu: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input
+              required
+              placeholder="English Statute Title"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-bold"
+              value={newLaw.title}
+              onChange={(e) => setNewLaw({ ...newLaw, title: e.target.value })}
+            />
+            <input
+              placeholder="قانون کا اردو عنوان"
+              className="p-3 bg-stone-50 border border-stone-300 text-sm font-urdu"
+              dir="rtl"
+              value={newLaw.title_urdu}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, title_urdu: e.target.value })
+              }
+            />
+            <textarea
+              placeholder="English Statutory Text..."
+              className="p-3 bg-stone-50 border border-stone-300 h-36 text-xs leading-relaxed"
+              value={newLaw.content}
+              onChange={(e) => setNewLaw({ ...newLaw, content: e.target.value })}
+            />
+            <textarea
+              placeholder="اردو قانونی متن..."
+              className="p-3 bg-stone-50 border border-stone-300 h-36 text-base font-urdu leading-loose"
+              dir="rtl"
+              value={newLaw.content_urdu}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, content_urdu: e.target.value })
+              }
+            />
+            <input
+              placeholder="English Marginal Commentary Note (Screen 12)"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs"
+              value={newLaw.marginal_notes}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, marginal_notes: e.target.value })
+              }
+            />
+            <input
+              placeholder="اردو حاشیہ اور تشریحی نوٹ"
+              dir="rtl"
+              className="p-3 bg-stone-50 border border-stone-300 text-xs font-urdu"
+              value={newLaw.marginal_notes_urdu}
+              onChange={(e) =>
+                setNewLaw({ ...newLaw, marginal_notes_urdu: e.target.value })
+              }
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+          >
+            {saving
+              ? "Saving..."
+              : editingId
+              ? "Update Statute"
+              : "Save Statute to Library"}
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-stone-500 text-xs">Loading legal records...</p>
+      ) : (
+        <div className="bg-white border border-stone-300 overflow-hidden">
+          <table className="min-w-full divide-y divide-stone-200 text-xs">
+            <thead className="bg-stone-50">
+              <tr>
+                <th className="px-6 py-3 text-left font-semibold text-stone-500 uppercase tracking-wider">
+                  Statute Title (EN / UR)
+                </th>
+                <th className="px-6 py-3 text-left font-semibold text-stone-500 uppercase tracking-wider">
+                  Category & Section
+                </th>
+                <th className="px-6 py-3 text-right font-semibold text-stone-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-200">
+              {laws.map((law) => (
+                <tr key={law.id} className="hover:bg-stone-50">
+                  <td className="px-6 py-4">
+                    <div className="font-bold font-legal text-stone-950 text-sm">
+                      {law.title}
+                    </div>
+                    <div
+                      className="text-stone-600 font-urdu text-base mt-1"
+                      dir="rtl"
+                    >
+                      {law.title_urdu}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-[#064E3B]">
+                      {law.category}
+                    </div>
+                    <div className="font-mono-code text-stone-500">
+                      {law.section_number}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(law)}
+                      className="px-3 py-1 border border-stone-300 text-[#064E3B] font-semibold cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(law.id)}
+                      className="px-3 py-1 border border-red-200 text-red-700 font-semibold cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
-  )
+  );
 }
