@@ -63,10 +63,16 @@ export default function AdminLayout({
             Overview Metrics
           </Link>
           <Link
-            href="/admin"
+            href="/admin/cms"
             className="hover:text-[#D4AF37] transition-colors"
           >
-            1. Publish News & Templates (50)
+            1. Editorial CMS (/admin/cms)
+          </Link>
+          <Link
+            href="/admin?tab=articles"
+            className="hover:text-[#D4AF37] transition-colors"
+          >
+            All 23 Tables Studio
           </Link>
           <Link
             href="/admin/laws"
@@ -79,6 +85,12 @@ export default function AdminLayout({
             className="hover:text-[#D4AF37] transition-colors"
           >
             3. Verify Advocates
+          </Link>
+          <Link
+            href="/admin?tab=users_rbac"
+            className="px-2.5 py-1 bg-[#D4AF37]/20 border border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-stone-950 transition-colors"
+          >
+            4. Users & RBAC Roles (users_profiles)
           </Link>
         </nav>
 

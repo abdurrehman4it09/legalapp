@@ -346,6 +346,109 @@ export default function Header({
             )}
           </div>
         </div>
+
+        {/* Master Database-to-Route Mapping Strip (Modules 1 to 5) */}
+        <div className="max-w-7xl mx-auto pt-2 mt-2 border-t border-stone-200/80 flex items-center gap-2 overflow-x-auto text-[11px]">
+          <span className="font-mono-code font-bold text-[#064E3B] uppercase tracking-wider shrink-0">
+            DB→Route Map:
+          </span>
+          <Link
+            href="/magazine/1"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M1: /magazine/1
+          </Link>
+          <Link
+            href="/lawyers"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M1: /lawyers
+          </Link>
+          <Link
+            href="/templates"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M1: /templates
+          </Link>
+          <Link
+            href="/forum"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M1: /forum
+          </Link>
+          <Link
+            href="/laws"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M1: /laws
+          </Link>
+          <Link
+            href="/auth/login"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M2: /auth/login
+          </Link>
+          <Link
+            href="/lawyers/1/book"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M3: /lawyers/1/book
+          </Link>
+          <Link
+            href="/client/cases"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M3: /client/cases
+          </Link>
+          <Link
+            href="/client/ai-assistant"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M3: /client/ai-assistant
+          </Link>
+          <Link
+            href="/forum/ask"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M3: /forum/ask
+          </Link>
+          <Link
+            href="/pro-bono/apply"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M3: /pro-bono/apply
+          </Link>
+          <Link
+            href="/lawyer/dashboard"
+            className="px-2 py-0.5 bg-emerald-950/10 hover:bg-emerald-950/20 text-[#064E3B] border border-[#064E3B]/30 font-semibold shrink-0"
+          >
+            M4: /lawyer/dashboard
+          </Link>
+          <Link
+            href="/lawyer/wallet"
+            className="px-2 py-0.5 bg-emerald-950/10 hover:bg-emerald-950/20 text-[#064E3B] border border-[#064E3B]/30 font-semibold shrink-0"
+          >
+            M4: /lawyer/wallet
+          </Link>
+          <Link
+            href="/admin/cms"
+            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-stone-900 border border-[#B48327]/50 font-semibold shrink-0"
+          >
+            M5: /admin/cms
+          </Link>
+          <Link
+            href="/chat/CASE-LHR-2026-09"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M5: /chat/[caseId]
+          </Link>
+          <Link
+            href="/video-call/VIDEO-CHAMBER-7721"
+            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
+          >
+            M5: /video-call/[caseId]
+          </Link>
+        </div>
       </div>
 
       {/* Screen 01: Splash Screen Modal Preview */}

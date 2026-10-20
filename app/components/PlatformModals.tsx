@@ -872,6 +872,7 @@ export function LegalAIWorkspaceModal({
   const isUr = lang === "ur";
   const { checkModuleAccess, switchRoleAndVerify } = useAuthRBAC();
   const [mode, setMode] = useState<"assistant" | "researcher">(initialMode);
+  const [speed, setSpeed] = useState<"general" | "fast">("general");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
@@ -900,6 +901,10 @@ export function LegalAIWorkspaceModal({
     if (!queryText) return;
     setPrompt("");
     setShowPromptSheet(false);
+    const currentHistory = messages.map((m) => ({
+      role: m.role,
+      text: m.text,
+    }));
     setMessages((prev) => [...prev, { role: "user", text: queryText }]);
     setLoading(true);
 
@@ -908,7 +913,13 @@ export function LegalAIWorkspaceModal({
         fetch("/api/legal-ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: queryText, lang, mode }),
+          body: JSON.stringify({
+            prompt: queryText,
+            history: currentHistory,
+            lang,
+            mode,
+            speed,
+          }),
         }),
         supabase.rpc("match_legal_documents", {
           query_text: queryText,
@@ -989,7 +1000,16 @@ export function LegalAIWorkspaceModal({
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Select Gemini Model Speed"
+              value={speed}
+              onChange={(e) => setSpeed(e.target.value as "general" | "fast")}
+              className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-950 text-emerald-100 border border-emerald-700 cursor-pointer"
+            >
+              <option value="general">Model: gemini-3.8-flash (General)</option>
+              <option value="fast">Model: gemini-3.1-flash-lite (Fast)</option>
+            </select>
             <button
               type="button"
               onClick={() => setMode("assistant")}

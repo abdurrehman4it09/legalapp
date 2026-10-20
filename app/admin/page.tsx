@@ -17,8 +17,16 @@ import {
   getRolePermissions,
   getActiveRBACSession,
   switchActiveRBACRole,
+  syncUserProfileAndSession,
   SyncedUserProfileSession,
+  USERS_PROFILES_RLS_SQL,
+  isOwnUserProfileRecord,
 } from "@/app/supabase";
+import {
+  saveMagazinePostServerAction,
+  deleteMagazinePostServerAction,
+} from "@/app/actions/platformActions";
+import { useAuthRBAC } from "@/app/AuthContext";
 import Link from "next/link";
 import {
   Calendar,
@@ -57,7 +65,8 @@ type AdminSection =
   | "users_rbac";
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<AdminSection>("articles");
+  const { verifyProfileRole } = useAuthRBAC();
+  const [activeTab, setActiveTab] = useState<AdminSection>("users_rbac");
   const [statusBanner, setStatusBanner] = useState("");
 
   // 1. Editorial Briefings / Posts state (Screens 02, 04, 50, 51, 52)
@@ -179,17 +188,38 @@ export default function AdminDashboard() {
   // 8. Site Masthead, Hero Engraving Plate & Escrow Wallet Settings (Screens 01, 02, 46)
   const [siteSettings, setSiteSettings] = useState<any>(() => getSiteSettings());
 
-  // 9. Users Profiles & 4-Role RBAC Manager (public.users_profiles)
+  // 9. Users Profiles & 4-Role RBAC Manager (public.users_profiles) — Complete CRUD State
   const [usersProfiles, setUsersProfiles] = useState<any[]>([]);
   const [activeSession, setActiveSession] =
     useState<SyncedUserProfileSession | null>(null);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPhone, setNewUserPhone] = useState("+92 300 ");
   const [newUserRole, setNewUserRole] = useState<RBACRole>("Client");
   const [newUserCity, setNewUserCity] = useState("Islamabad");
+  const [newUserVerificationStatus, setNewUserVerificationStatus] = useState<
+    "Verified" | "Under Review" | "Rejected"
+  >("Verified");
   const [newUserBarId, setNewUserBarId] = useState("");
   const [newUserCourt, setNewUserCourt] = useState("Islamabad High Court");
+  const [newUserLicenseUrl, setNewUserLicenseUrl] = useState("");
+  const [newUserLangPref, setNewUserLangPref] = useState<"en" | "ur">("en");
+  const [newUserThemePref, setNewUserThemePref] = useState<
+    "light" | "dark" | "system"
+  >("light");
+  const [newUserCategories, setNewUserCategories] = useState(
+    "Property & Inheritance, Constitutional Petitions"
+  );
+  const [newUserNotifications, setNewUserNotifications] = useState(true);
+  const [newUserDeletionReq, setNewUserDeletionReq] = useState(false);
+  const [syncAsActiveOnSave, setSyncAsActiveOnSave] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | RBACRole>("ALL");
+  const [userStatusFilter, setUserStatusFilter] = useState<
+    "ALL" | "Verified" | "Under Review" | "Rejected"
+  >("ALL");
+  const [showRlsSqlModal, setShowRlsSqlModal] = useState(false);
 
   async function refreshAll() {
     await syncAllTablesFromSupabase();
@@ -248,11 +278,215 @@ export default function AdminDashboard() {
   useEffect(() => {
     refreshAll();
     if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab") as AdminSection | null;
+      if (
+        tabParam &&
+        [
+          "articles",
+          "categories",
+          "templates",
+          "qa",
+          "crm_escrow",
+          "probono",
+          "ai_notifications",
+          "masthead",
+          "users_rbac",
+        ].includes(tabParam)
+      ) {
+        setActiveTab(tabParam);
+      }
       const onSync = () => setActiveSession(getActiveRBACSession());
       window.addEventListener("plp_data_updated", onSync);
       return () => window.removeEventListener("plp_data_updated", onSync);
     }
   }, []);
+
+  function resetUserProfileForm() {
+    setEditingUserId(null);
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserPhone("+92 300 ");
+    setNewUserRole("Client");
+    setNewUserCity("Islamabad");
+    setNewUserVerificationStatus("Verified");
+    setNewUserBarId("");
+    setNewUserCourt("Islamabad High Court");
+    setNewUserLicenseUrl("");
+    setNewUserLangPref("en");
+    setNewUserThemePref("light");
+    setNewUserCategories("Property & Inheritance, Constitutional Petitions");
+    setNewUserNotifications(true);
+    setNewUserDeletionReq(false);
+    setSyncAsActiveOnSave(false);
+  }
+
+  function handleEditUserProfile(u: any) {
+    setEditingUserId(u.id);
+    setNewUserName(u.full_name || "");
+    setNewUserEmail(u.email || "");
+    setNewUserPhone(u.phone || "+92 300 ");
+    setNewUserRole(normalizeRBACRole(u.role));
+    setNewUserCity(u.city || "Islamabad");
+    setNewUserVerificationStatus(u.verification_status || "Verified");
+    setNewUserBarId(u.bar_council_id || "");
+    setNewUserCourt(u.high_court || "Islamabad High Court");
+    setNewUserLicenseUrl(u.bar_license_url || "");
+    setNewUserLangPref(u.language_pref === "ur" ? "ur" : "en");
+    setNewUserThemePref(
+      u.theme_pref === "dark" || u.theme_pref === "system"
+        ? u.theme_pref
+        : "light"
+    );
+    setNewUserCategories(
+      Array.isArray(u.interested_categories)
+        ? u.interested_categories.join(", ")
+        : u.interested_categories || "Property & Inheritance"
+    );
+    setNewUserNotifications(u.notifications_enabled !== false);
+    setNewUserDeletionReq(Boolean(u.deletion_requested));
+    setSyncAsActiveOnSave(false);
+  }
+
+  async function handleSaveUserProfile(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUserName.trim()) {
+      flashBanner("Please enter the user's Full Legal Name.");
+      return;
+    }
+    const normalized = normalizeRBACRole(newUserRole);
+    const categoriesArray = newUserCategories
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    const payload = {
+      email:
+        newUserEmail.trim() ||
+        `${newUserName.toLowerCase().replace(/[^a-z0-9]/g, ".")}@legalbrief.pk`,
+      phone: newUserPhone.trim() || "+92 300 0000000",
+      full_name: newUserName.trim(),
+      role: normalized,
+      city: newUserCity,
+      language_pref: newUserLangPref,
+      theme_pref: newUserThemePref,
+      notifications_enabled: newUserNotifications,
+      interested_categories:
+        categoriesArray.length > 0
+          ? categoriesArray
+          : ["Property & Inheritance"],
+      bar_council_id:
+        normalized === "Verified Advocate"
+          ? newUserBarId.trim() || "PBC-HC-2026"
+          : newUserBarId.trim(),
+      high_court:
+        normalized === "Verified Advocate"
+          ? newUserCourt || "Islamabad High Court"
+          : newUserCourt,
+      bar_license_url:
+        normalized === "Verified Advocate"
+          ? newUserLicenseUrl.trim() ||
+            `storage://bar-licenses/${(newUserBarId || "PBC").replace(/\s+/g, "_")}_License.pdf`
+          : newUserLicenseUrl.trim(),
+      verification_status: newUserVerificationStatus,
+      rbac_permissions: RBAC_ROLE_PERMISSIONS[normalized],
+      deletion_requested: newUserDeletionReq,
+      updated_at: new Date().toISOString(),
+    };
+
+    const callerIsAdmin =
+      !activeSession || normalizeRBACRole(activeSession.rbacRole) === "Admin";
+
+    let targetId = editingUserId;
+    if (editingUserId !== null) {
+      const existingRow = usersProfiles.find(
+        (u) => String(u.id) === String(editingUserId)
+      );
+      const updatePayload = callerIsAdmin
+        ? payload
+        : {
+            email: payload.email,
+            phone: payload.phone,
+            full_name: payload.full_name,
+            city: payload.city,
+            language_pref: payload.language_pref,
+            theme_pref: payload.theme_pref,
+            notifications_enabled: payload.notifications_enabled,
+            interested_categories: payload.interested_categories,
+            bar_council_id: payload.bar_council_id,
+            high_court: payload.high_court,
+            bar_license_url: payload.bar_license_url,
+            deletion_requested: payload.deletion_requested,
+            updated_at: payload.updated_at,
+          };
+
+      const { error } = await supabase
+        .from("users_profiles")
+        .update(updatePayload)
+        .eq("id", editingUserId);
+
+      if (error) {
+        flashBanner(error.message);
+        return;
+      }
+
+      flashBanner(
+        callerIsAdmin
+          ? `Updated "${payload.full_name}" (ID #${editingUserId}) in Supabase public.users_profiles with role: ${normalized}!`
+          : `RLS Self-Update (users_profiles_update_own_or_admin): Updated your own profile fields for "${
+              payload.full_name
+            }" (Role "${existingRow?.role || activeSession?.rbacRole}" preserved).`
+      );
+    } else {
+      targetId = Date.now();
+      const newRow = {
+        id: targetId,
+        ...payload,
+        created_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("users_profiles").insert([newRow]);
+      if (error) {
+        flashBanner(error.message);
+        return;
+      }
+      flashBanner(
+        `Created "${payload.full_name}" in Supabase public.users_profiles with RBAC role: ${normalized}!`
+      );
+    }
+
+    const isCurrentActiveUser =
+      activeSession &&
+      (activeSession.id === targetId ||
+        (activeSession.phoneOrEmail &&
+          (activeSession.phoneOrEmail.toLowerCase() ===
+            payload.email.toLowerCase() ||
+            activeSession.phoneOrEmail === payload.phone)));
+
+    if (syncAsActiveOnSave || isCurrentActiveUser) {
+      const effectiveRole = callerIsAdmin
+        ? normalized
+        : activeSession?.rbacRole || normalized;
+      const synced = await syncUserProfileAndSession({
+        phoneOrEmail: payload.email || payload.phone,
+        fullName: payload.full_name,
+        city: payload.city,
+        role: effectiveRole,
+        barCouncilId: payload.bar_council_id,
+        highCourt: payload.high_court,
+        barLicenseUrl: payload.bar_license_url,
+        verificationStatus: callerIsAdmin
+          ? payload.verification_status
+          : undefined,
+        interests: payload.interested_categories,
+        lang: payload.language_pref,
+      });
+      setActiveSession(synced);
+      await verifyProfileRole();
+    }
+
+    resetUserProfileForm();
+    await refreshAll();
+  }
 
   const flashBanner = (msg: string) => {
     setStatusBanner(msg);
@@ -283,12 +517,21 @@ export default function AdminDashboard() {
         : new Date().toISOString(),
     };
 
+    await saveMagazinePostServerAction({
+      id: editingArtId,
+      ...payload,
+    });
+
     if (editingArtId) {
       await supabase.from("articles").update(payload).eq("id", editingArtId);
-      flashBanner("Updated briefing across English & Urdu apps!");
+      flashBanner(
+        "Updated briefing in magazine_posts & revalidated public routes ('/', '/magazine/[id]')!"
+      );
     } else {
       await supabase.from("articles").insert([payload]);
-      flashBanner("Published new briefing live to English & Urdu apps!");
+      flashBanner(
+        "Published new briefing to magazine_posts & revalidated '/' immediately!"
+      );
     }
     resetArticleForm();
     refreshAll();
@@ -322,9 +565,10 @@ export default function AdminDashboard() {
   }
 
   async function deleteArticle(id: number) {
+    await deleteMagazinePostServerAction(id);
     await supabase.from("articles").delete().eq("id", id);
     refreshAll();
-    flashBanner("Briefing deleted.");
+    flashBanner("Briefing deleted & revalidated public routes.");
   }
 
   /* ---- 2. CATEGORIES HANDLERS ---- */
@@ -2244,208 +2488,875 @@ export default function AdminDashboard() {
           ====================================================================== */}
       {activeTab === "users_rbac" && (
         <div className="space-y-8">
+          {/* Role Breakdown & Supabase Sync Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <button
+              type="button"
+              onClick={() => setUserRoleFilter("ALL")}
+              className={`p-4 border text-left transition cursor-pointer ${
+                userRoleFilter === "ALL"
+                  ? "bg-[#064E3B] text-white border-[#064E3B]"
+                  : "bg-white text-stone-900 border-stone-300 hover:border-[#064E3B]"
+              }`}
+            >
+              <span className="text-[10px] uppercase tracking-widest font-mono-code block opacity-80">
+                public.users_profiles
+              </span>
+              <div className="text-2xl font-bold font-legal mt-1">
+                {usersProfiles.length}
+              </div>
+              <span className="text-[11px] font-semibold">
+                All Synced Users
+              </span>
+            </button>
+
+            {RBAC_ROLES.map((r) => {
+              const count = usersProfiles.filter(
+                (u) => normalizeRBACRole(u.role) === r
+              ).length;
+              const isSelected = userRoleFilter === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() =>
+                    setUserRoleFilter(isSelected ? "ALL" : r)
+                  }
+                  className={`p-4 border text-left transition cursor-pointer ${
+                    isSelected
+                      ? "bg-[#064E3B] text-white border-[#064E3B]"
+                      : "bg-white text-stone-900 border-stone-300 hover:border-[#064E3B]"
+                  }`}
+                >
+                  <span className="text-[10px] uppercase tracking-widest font-mono-code block opacity-80">
+                    RBAC Role
+                  </span>
+                  <div className="text-2xl font-bold font-legal mt-1">
+                    {count}
+                  </div>
+                  <span className="text-[11px] font-semibold">{r}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="bg-white border border-stone-300 p-6 sm:p-8 space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-4">
               <div>
                 <span className="text-xs uppercase tracking-widest text-[#064E3B] font-semibold block">
-                  Supabase Table: public.users_profiles · 4-Role RBAC & Bar Verification Engine
+                  Supabase Table: public.users_profiles · Row Level Security (RLS) & 4-Role RBAC CRUD
                 </span>
                 <h2 className="text-xl font-bold font-legal text-stone-950">
-                  Manage User Profiles & Sync Roles (Client, Verified Advocate, Editorial Manager, Admin)
+                  {editingUserId !== null
+                    ? `Edit User Profile #${editingUserId} (${newUserName || "Profile"})`
+                    : "Create or Update User Profiles & Sync RBAC Roles"}
                 </h2>
+                <p className="text-xs text-stone-600 mt-0.5">
+                  RLS Enforced: Only <strong>Admin</strong> can perform CRUD on other user records and assign roles (<strong>Client</strong>, <strong>Verified Advocate</strong>, <strong>Editorial Manager</strong>, <strong>Admin</strong>). Non-Admin users can only update their own profile fields.
+                </p>
               </div>
-              <Users className="w-6 h-6 text-[#B48327]" />
+              <div className="flex flex-wrap items-center gap-2">
+                {activeSession && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ownRow = usersProfiles.find((u) =>
+                        isOwnUserProfileRecord(u, activeSession)
+                      );
+                      if (ownRow) {
+                        handleEditUserProfile(ownRow);
+                        flashBanner(
+                          `Loaded your own profile (#${ownRow.id} ${ownRow.full_name}) for RLS self-profile update.`
+                        );
+                      }
+                    }}
+                    className="px-3 py-2 bg-emerald-950/10 border border-[#064E3B] text-xs font-semibold text-[#064E3B] hover:bg-[#064E3B] hover:text-white cursor-pointer"
+                  >
+                    Edit My Own Profile
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowRlsSqlModal(!showRlsSqlModal)}
+                  className="px-3 py-2 bg-stone-900 text-[#D4AF37] text-xs font-semibold cursor-pointer"
+                >
+                  {showRlsSqlModal
+                    ? "Hide RLS Policies SQL"
+                    : "View / Copy RLS Policies SQL"}
+                </button>
+                {editingUserId !== null && (
+                  <button
+                    type="button"
+                    onClick={resetUserProfileForm}
+                    className="px-3 py-2 border border-stone-300 text-xs font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await refreshAll();
+                    await verifyProfileRole();
+                    flashBanner(
+                      "Re-synced all records from Supabase public.users_profiles & verified active session role."
+                    );
+                  }}
+                  className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-300 text-xs font-semibold text-stone-900 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-[#064E3B]" />
+                  <span>Sync Supabase Table</span>
+                </button>
+              </div>
             </div>
 
+            {/* Active Supabase RLS Policy Enforcement Matrix */}
+            <div className="p-4 bg-stone-50 border border-stone-300 space-y-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-bold text-stone-900">
+                  <ShieldCheck className="w-4 h-4 text-[#064E3B]" />
+                  <span>
+                    Supabase Row Level Security (RLS) Active on{" "}
+                    <code className="font-mono-code text-[#064E3B]">
+                      public.users_profiles
+                    </code>
+                  </span>
+                </div>
+                <span
+                  className={`px-2.5 py-0.5 font-mono-code font-bold ${
+                    !activeSession ||
+                    normalizeRBACRole(activeSession.rbacRole) === "Admin"
+                      ? "bg-[#064E3B] text-white"
+                      : "bg-amber-100 text-amber-900 border border-amber-300"
+                  }`}
+                >
+                  {!activeSession ||
+                  normalizeRBACRole(activeSession.rbacRole) === "Admin"
+                    ? "public.is_admin_user() = TRUE (Full CRUD on All User Records)"
+                    : `public.is_admin_user() = FALSE (Role: ${activeSession.rbacRole} · Self-Profile Update Only)`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-[11px]">
+                <div className="p-2.5 bg-white border border-stone-200">
+                  <div className="font-mono-code font-bold text-[#064E3B]">
+                    1. SELECT Policy
+                  </div>
+                  <div className="text-stone-600 mt-0.5">
+                    <code>auth.uid() = auth_uid OR public.is_admin_user()</code>
+                  </div>
+                </div>
+                <div className="p-2.5 bg-white border border-stone-200">
+                  <div className="font-mono-code font-bold text-[#064E3B]">
+                    2. INSERT Policy
+                  </div>
+                  <div className="text-stone-600 mt-0.5">
+                    <code>public.is_admin_user()</code> (or own initial signup)
+                  </div>
+                </div>
+                <div className="p-2.5 bg-white border border-stone-200">
+                  <div className="font-mono-code font-bold text-[#064E3B]">
+                    3. UPDATE Policy + Column Trigger
+                  </div>
+                  <div className="text-stone-600 mt-0.5">
+                    Admin all rows/columns; users own profile fields only (role locked)
+                  </div>
+                </div>
+                <div className="p-2.5 bg-white border border-stone-200">
+                  <div className="font-mono-code font-bold text-[#064E3B]">
+                    4. DELETE Policy
+                  </div>
+                  <div className="text-stone-600 mt-0.5">
+                    <code>USING (public.is_admin_user())</code> — Admin strictly required
+                  </div>
+                </div>
+              </div>
+
+              {showRlsSqlModal && (
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono-code text-[11px] font-bold text-stone-800">
+                      PostgreSQL RLS Policies & Trigger for public.users_profiles:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.clipboard) {
+                          navigator.clipboard.writeText(USERS_PROFILES_RLS_SQL);
+                          flashBanner(
+                            "Copied public.users_profiles RLS policies SQL to clipboard!"
+                          );
+                        }
+                      }}
+                      className="px-3 py-1 bg-[#064E3B] text-white font-semibold text-[11px] cursor-pointer"
+                    >
+                      Copy RLS SQL
+                    </button>
+                  </div>
+                  <pre className="p-3 bg-stone-950 text-emerald-300 font-mono-code text-[11px] overflow-x-auto max-h-72 leading-relaxed">
+                    {USERS_PROFILES_RLS_SQL}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Complete Create / Edit CRUD Form for public.users_profiles */}
             <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!newUserName.trim()) return;
-                const normalized = normalizeRBACRole(newUserRole);
-                const newRow = {
-                  id: Date.now(),
-                  email: newUserEmail || "user@legalbrief.pk",
-                  phone: newUserPhone,
-                  full_name: newUserName,
-                  role: normalized,
-                  city: newUserCity,
-                  language_pref: "en",
-                  theme_pref: "light",
-                  notifications_enabled: true,
-                  interested_categories: ["Property & Inheritance"],
-                  bar_council_id:
-                    normalized === "Verified Advocate" ? newUserBarId || "PBC-HC-2026" : "",
-                  high_court:
-                    normalized === "Verified Advocate" ? newUserCourt : "",
-                  bar_license_url:
-                    normalized === "Verified Advocate"
-                      ? `storage://bar-licenses/${newUserBarId || "PBC"}_License.pdf`
-                      : "",
-                  verification_status: "Verified",
-                  rbac_permissions: RBAC_ROLE_PERMISSIONS[normalized],
-                  deletion_requested: false,
-                  created_at: new Date().toISOString(),
-                };
-                await supabase.from("users_profiles").insert([newRow]);
-                setNewUserName("");
-                setNewUserEmail("");
-                refreshAll();
-                flashBanner(
-                  `User Profile "${newRow.full_name}" created in public.users_profiles with RBAC role: ${normalized}!`
-                );
-              }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs bg-stone-50 p-4 border border-stone-200"
+              onSubmit={handleSaveUserProfile}
+              className="bg-stone-50 p-5 border border-stone-300 space-y-4 text-xs"
             >
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-3">
+                <div className="font-bold text-stone-900 uppercase tracking-wider">
+                  {editingUserId !== null
+                    ? !activeSession ||
+                      normalizeRBACRole(activeSession.rbacRole) === "Admin"
+                      ? `Admin CRUD: Updating Record ID #${editingUserId} in public.users_profiles`
+                      : `RLS Self-Profile Update: Editing Your Own Profile Fields (#${editingUserId})`
+                    : "New Record for public.users_profiles (Admin Only under RLS)"}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-500">Selected Role Permissions:</span>
+                  <span
+                    className={`px-2.5 py-0.5 font-mono-code font-semibold text-[11px] ${
+                      RBAC_ROLE_PERMISSIONS[newUserRole].badgeColor
+                    }`}
+                  >
+                    {newUserRole} · Modules{" "}
+                    {RBAC_ROLE_PERMISSIONS[newUserRole].modules.join(", ")}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Full Legal Name (full_name) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g., Adv. Tariq Mehmood, ASC"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Email Address (email) *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="user@legalbrief.pk"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 font-mono-code"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    +92 Phone Number (phone) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="+92 300 5550199"
+                    value={newUserPhone}
+                    onChange={(e) => setNewUserPhone(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 font-mono-code"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    RBAC Role (user_profiles.role) *{" "}
+                    {activeSession &&
+                      normalizeRBACRole(activeSession.rbacRole) !== "Admin" && (
+                        <span className="text-[10px] text-amber-800 font-mono-code">
+                          [RLS Admin Only]
+                        </span>
+                      )}
+                  </label>
+                  <select
+                    value={newUserRole}
+                    disabled={
+                      Boolean(activeSession) &&
+                      normalizeRBACRole(activeSession?.rbacRole) !== "Admin"
+                    }
+                    onChange={(e) => setNewUserRole(e.target.value as RBACRole)}
+                    className="w-full p-2.5 bg-white border border-[#064E3B] font-bold text-[#064E3B] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {RBAC_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    City / Jurisdiction (city)
+                  </label>
+                  <select
+                    value={newUserCity}
+                    onChange={(e) => setNewUserCity(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  >
+                    {[
+                      "Islamabad",
+                      "Lahore",
+                      "Karachi",
+                      "Peshawar",
+                      "Quetta",
+                      "Rawalpindi",
+                      "Multan",
+                      "Faisalabad",
+                    ].map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Bar Verification Status (verification_status){" "}
+                    {activeSession &&
+                      normalizeRBACRole(activeSession.rbacRole) !== "Admin" && (
+                        <span className="text-[10px] text-amber-800 font-mono-code">
+                          [RLS Admin Only]
+                        </span>
+                      )}
+                  </label>
+                  <select
+                    value={newUserVerificationStatus}
+                    disabled={
+                      Boolean(activeSession) &&
+                      normalizeRBACRole(activeSession?.rbacRole) !== "Admin"
+                    }
+                    onChange={(e) =>
+                      setNewUserVerificationStatus(
+                        e.target.value as "Verified" | "Under Review" | "Rejected"
+                      )
+                    }
+                    className="w-full p-2.5 bg-white border border-stone-300 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="Verified">Verified</option>
+                    <option value="Under Review">Under Review (Screen 20)</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Bar Council Roll ID (bar_council_id)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., PBC-SC-44912"
+                    value={newUserBarId}
+                    onChange={(e) => setNewUserBarId(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 font-mono-code"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Enrolled Court (high_court)
+                  </label>
+                  <select
+                    value={newUserCourt}
+                    onChange={(e) => setNewUserCourt(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  >
+                    <option value="">None / Not Applicable</option>
+                    <option value="Supreme Court of Pakistan">
+                      Supreme Court of Pakistan
+                    </option>
+                    <option value="Islamabad High Court">
+                      Islamabad High Court
+                    </option>
+                    <option value="Lahore High Court">Lahore High Court</option>
+                    <option value="Sindh High Court">Sindh High Court</option>
+                    <option value="Peshawar High Court">
+                      Peshawar High Court
+                    </option>
+                    <option value="Balochistan High Court">
+                      Balochistan High Court
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Bar License Storage URI (bar_license_url)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="storage://bar-licenses/PBC_License.pdf"
+                    value={newUserLicenseUrl}
+                    onChange={(e) => setNewUserLicenseUrl(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 font-mono-code"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Language Preference (language_pref)
+                  </label>
+                  <select
+                    value={newUserLangPref}
+                    onChange={(e) =>
+                      setNewUserLangPref(e.target.value as "en" | "ur")
+                    }
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  >
+                    <option value="en">English (LTR - en)</option>
+                    <option value="ur">Urdu (RTL - ur)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Theme Mode (theme_pref - Screen 60)
+                  </label>
+                  <select
+                    value={newUserThemePref}
+                    onChange={(e) =>
+                      setNewUserThemePref(
+                        e.target.value as "light" | "dark" | "system"
+                      )
+                    }
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  >
+                    <option value="light">Light (Crisp Paper)</option>
+                    <option value="dark">Dark (Charcoal Slate)</option>
+                    <option value="system">System Default</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Interested Legal Categories (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Property & Inheritance, Tax..."
+                    value={newUserCategories}
+                    onChange={(e) => setNewUserCategories(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300"
+                  />
+                </div>
+              </div>
+
+              {/* Checkboxes & Submit Bar */}
+              <div className="pt-3 border-t border-stone-200 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newUserNotifications}
+                      onChange={(e) =>
+                        setNewUserNotifications(e.target.checked)
+                      }
+                      className="accent-[#064E3B]"
+                    />
+                    <span>Notifications Enabled (Screen 57)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-red-800">
+                    <input
+                      type="checkbox"
+                      checked={newUserDeletionReq}
+                      onChange={(e) => setNewUserDeletionReq(e.target.checked)}
+                      className="accent-red-700"
+                    />
+                    <span>Account Deletion Requested (Screen 58)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-[#064E3B]">
+                    <input
+                      type="checkbox"
+                      checked={syncAsActiveOnSave}
+                      onChange={(e) => setSyncAsActiveOnSave(e.target.checked)}
+                      className="accent-[#064E3B]"
+                    />
+                    <span>
+                      Also activate & verify this profile as current session on save
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {editingUserId !== null && (
+                    <button
+                      type="button"
+                      onClick={resetUserProfileForm}
+                      className="px-4 py-2.5 bg-white border border-stone-300 text-stone-700 font-semibold cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider cursor-pointer"
+                  >
+                    {editingUserId !== null
+                      ? `Update Profile #${editingUserId} in Supabase`
+                      : "+ Create Profile in Supabase (users_profiles)"}
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Search & Filter Controls for public.users_profiles */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
               <input
                 type="text"
-                required
-                placeholder="Full Name..."
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-                className="p-2.5 bg-white border border-stone-300"
-              />
-              <input
-                type="email"
-                placeholder="Email..."
-                value={newUserEmail}
-                onChange={(e) => setNewUserEmail(e.target.value)}
-                className="p-2.5 bg-white border border-stone-300 font-mono-code"
-              />
-              <input
-                type="text"
-                placeholder="+92 Phone..."
-                value={newUserPhone}
-                onChange={(e) => setNewUserPhone(e.target.value)}
-                className="p-2.5 bg-white border border-stone-300 font-mono-code"
+                placeholder="Search by Name, Email, +92 Phone, Bar ID, or City..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="p-2.5 bg-stone-50 border border-stone-300"
               />
               <select
-                value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value as RBACRole)}
-                className="p-2.5 bg-white border border-stone-300 font-semibold"
+                value={userRoleFilter}
+                onChange={(e) =>
+                  setUserRoleFilter(e.target.value as "ALL" | RBACRole)
+                }
+                className="p-2.5 bg-stone-50 border border-stone-300 font-semibold"
               >
+                <option value="ALL">Filter by RBAC Role: All 4 Roles</option>
                 {RBAC_ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    Role: {r}
                   </option>
                 ))}
               </select>
-              <input
-                type="text"
-                placeholder="Bar ID (if Advocate)"
-                value={newUserBarId}
-                onChange={(e) => setNewUserBarId(e.target.value)}
-                className="p-2.5 bg-white border border-stone-300 font-mono-code"
-              />
-              <button
-                type="submit"
-                className="p-2.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
+              <select
+                value={userStatusFilter}
+                onChange={(e) =>
+                  setUserStatusFilter(
+                    e.target.value as
+                      | "ALL"
+                      | "Verified"
+                      | "Under Review"
+                      | "Rejected"
+                  )
+                }
+                className="p-2.5 bg-stone-50 border border-stone-300 font-semibold"
               >
-                + Add Profile to Supabase
-              </button>
-            </form>
+                <option value="ALL">
+                  Filter by Verification Status: All Statuses
+                </option>
+                <option value="Verified">Status: Verified</option>
+                <option value="Under Review">Status: Under Review</option>
+                <option value="Rejected">Status: Rejected</option>
+              </select>
+            </div>
 
+            {/* Complete CRUD List of public.users_profiles */}
             <div className="divide-y divide-stone-200 border border-stone-200">
-              {usersProfiles.map((u) => {
-                const currentRole = normalizeRBACRole(u.role);
-                const perm = RBAC_ROLE_PERMISSIONS[currentRole];
-                return (
-                  <div
-                    key={u.id}
-                    className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <strong className="text-sm font-legal text-stone-950">
-                          {u.full_name}
-                        </strong>
-                        <span
-                          className={`text-[10px] px-2 py-0.5 font-mono-code font-semibold ${perm.badgeColor}`}
+              {usersProfiles
+                .filter((u) => {
+                  const roleNorm = normalizeRBACRole(u.role);
+                  if (userRoleFilter !== "ALL" && roleNorm !== userRoleFilter) {
+                    return false;
+                  }
+                  const status = u.verification_status || "Verified";
+                  if (
+                    userStatusFilter !== "ALL" &&
+                    status !== userStatusFilter
+                  ) {
+                    return false;
+                  }
+                  if (userSearchQuery.trim()) {
+                    const q = userSearchQuery.toLowerCase();
+                    const hay = `${u.full_name || ""} ${u.email || ""} ${
+                      u.phone || ""
+                    } ${u.bar_council_id || ""} ${u.city || ""} ${roleNorm}`.toLowerCase();
+                    return hay.includes(q);
+                  }
+                  return true;
+                })
+                .map((u) => {
+                  const currentRole = normalizeRBACRole(u.role);
+                  const perm = RBAC_ROLE_PERMISSIONS[currentRole];
+                  const isCurrentSession =
+                    activeSession &&
+                    (activeSession.id === u.id ||
+                      (u.email &&
+                        activeSession.phoneOrEmail?.toLowerCase() ===
+                          u.email.toLowerCase()));
+
+                  return (
+                    <div
+                      key={u.id}
+                      className={`p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition ${
+                        editingUserId === u.id
+                          ? "bg-amber-50/70 border-l-4 border-[#B48327]"
+                          : isCurrentSession
+                          ? "bg-emerald-950/5 border-l-4 border-[#064E3B]"
+                          : "bg-white"
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-mono-code text-stone-400">
+                            #{u.id}
+                          </span>
+                          <strong className="text-sm font-legal text-stone-950">
+                            {u.full_name}
+                          </strong>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 font-mono-code font-semibold ${perm.badgeColor}`}
+                          >
+                            {currentRole} · Modules {perm.modules.join(", ")}
+                          </span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 font-mono-code font-semibold border ${
+                              u.verification_status === "Under Review"
+                                ? "bg-amber-50 text-amber-800 border-amber-300"
+                                : u.verification_status === "Rejected"
+                                ? "bg-red-50 text-red-800 border-red-300"
+                                : "bg-emerald-50 text-[#064E3B] border-emerald-200"
+                            }`}
+                          >
+                            {u.verification_status || "Verified"}
+                          </span>
+                          {isCurrentSession && (
+                            <span className="text-[10px] px-2 py-0.5 bg-[#064E3B] text-[#D4AF37] font-mono-code font-bold uppercase">
+                              Active Verified Session (Own Profile)
+                            </span>
+                          )}
+                          {!isCurrentSession &&
+                            activeSession &&
+                            normalizeRBACRole(activeSession.rbacRole) !==
+                              "Admin" && (
+                              <span className="text-[10px] px-2 py-0.5 bg-stone-200 text-stone-700 font-mono-code font-semibold">
+                                RLS Protected · Admin Only
+                              </span>
+                            )}
+                          {u.deletion_requested && (
+                            <span className="text-[10px] px-2 py-0.5 bg-red-700 text-white font-mono-code font-semibold">
+                              Deletion Requested
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-stone-600 font-mono-code flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span>{u.email || "No email"}</span>
+                          <span>·</span>
+                          <span>{u.phone || "No phone"}</span>
+                          <span>·</span>
+                          <span>City: {u.city || "Islamabad"}</span>
+                          <span>·</span>
+                          <span>
+                            Prefs: {String(u.language_pref || "en").toUpperCase()} /{" "}
+                            {u.theme_pref || "light"}
+                          </span>
+                          {u.bar_council_id && (
+                            <>
+                              <span>·</span>
+                              <span className="text-[#064E3B] font-semibold">
+                                Bar ID: {u.bar_council_id} ({u.high_court || "High Court"})
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          {perm.canBookAndPostQA && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 border border-stone-300 text-stone-700">
+                              Client Workspace (21–34)
+                            </span>
+                          )}
+                          {perm.canAccessAdvocateCRM && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-[#064E3B]">
+                              Lawyer CRM (35–49)
+                            </span>
+                          )}
+                          {perm.canAccessAIResearcherPro && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-900">
+                              AI Researcher Pro (40)
+                            </span>
+                          )}
+                          {perm.canManageEditorialCMS && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-stone-200 border border-stone-400 text-stone-900">
+                              Editorial Supply CMS
+                            </span>
+                          )}
+                          {perm.canManageFullAdminAndUsers && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-stone-900 text-[#D4AF37] font-semibold">
+                              Full Super Admin & RBAC
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {/* Quick Role Assignment Dropdown synced with Supabase & guarded by RLS */}
+                        <select
+                          aria-label={`Assign RBAC role for ${u.full_name}`}
+                          value={currentRole}
+                          onChange={async (e) => {
+                            const nextRole = normalizeRBACRole(e.target.value);
+                            const { error } = await supabase
+                              .from("users_profiles")
+                              .update({
+                                role: nextRole,
+                                rbac_permissions:
+                                  RBAC_ROLE_PERMISSIONS[nextRole],
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq("id", u.id);
+
+                            if (error) {
+                              flashBanner(error.message);
+                              return;
+                            }
+
+                            if (isCurrentSession) {
+                              const synced = await switchActiveRBACRole(
+                                nextRole
+                              );
+                              setActiveSession(synced);
+                              await verifyProfileRole();
+                            }
+                            await refreshAll();
+                            flashBanner(
+                              `Synced ${u.full_name}'s role in Supabase public.users_profiles → ${nextRole}`
+                            );
+                          }}
+                          className="px-2.5 py-1.5 border border-stone-300 bg-stone-50 font-semibold cursor-pointer"
                         >
-                          {currentRole} · Modules {perm.modules.join(", ")}
-                        </span>
-                        <span className="text-[11px] font-mono-code text-stone-500">
-                          [{u.verification_status || "Verified"}]
-                        </span>
-                      </div>
-                      <div className="text-xs text-stone-600 font-mono-code">
-                        {u.email || "No email"} · {u.phone || "No phone"} · {u.city}
-                        {u.bar_council_id ? ` · Bar ID: ${u.bar_council_id} (${u.high_court})` : ""}
+                          {RBAC_ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              Role: {r}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Quick Verification Status Dropdown synced with Supabase & guarded by RLS */}
+                        <select
+                          aria-label={`Verification status for ${u.full_name}`}
+                          value={u.verification_status || "Verified"}
+                          onChange={async (e) => {
+                            const nextStatus = e.target.value;
+                            const { error } = await supabase
+                              .from("users_profiles")
+                              .update({
+                                verification_status: nextStatus,
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq("id", u.id);
+                            if (error) {
+                              flashBanner(error.message);
+                              return;
+                            }
+                            await refreshAll();
+                            await verifyProfileRole();
+                            flashBanner(
+                              `Updated verification_status for ${u.full_name} to ${nextStatus} in Supabase`
+                            );
+                          }}
+                          className="px-2.5 py-1.5 border border-stone-300 bg-white cursor-pointer"
+                        >
+                          <option value="Verified">Verified</option>
+                          <option value="Under Review">Under Review</option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+
+                        {/* Full Edit / Self-Edit Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const callerIsAdmin =
+                              !activeSession ||
+                              normalizeRBACRole(activeSession.rbacRole) ===
+                                "Admin";
+                            if (!callerIsAdmin && !isCurrentSession) {
+                              flashBanner(
+                                `RLS Policy Violation (users_profiles_update_own_or_admin): Role "${activeSession?.rbacRole}" can only edit their own profile fields. Switch to Admin to edit "${u.full_name}".`
+                              );
+                              return;
+                            }
+                            handleEditUserProfile(u);
+                          }}
+                          className="px-2.5 py-1.5 border border-stone-300 hover:border-[#064E3B] text-stone-800 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>
+                            {isCurrentSession &&
+                            activeSession &&
+                            normalizeRBACRole(activeSession.rbacRole) !==
+                              "Admin"
+                              ? "Edit Own Fields"
+                              : "Edit"}
+                          </span>
+                        </button>
+
+                        {/* Activate / Impersonate Profile Session */}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const synced = await syncUserProfileAndSession({
+                              phoneOrEmail: u.email || u.phone,
+                              fullName: u.full_name,
+                              city: u.city,
+                              role: currentRole,
+                              barCouncilId: u.bar_council_id,
+                              highCourt: u.high_court,
+                              barLicenseUrl: u.bar_license_url,
+                              verificationStatus: u.verification_status,
+                              interests: u.interested_categories,
+                              lang: u.language_pref,
+                            });
+                            setActiveSession(synced);
+                            await verifyProfileRole();
+                            await refreshAll();
+                            flashBanner(
+                              `Active session synced to ${u.full_name} (${currentRole}) via public.users_profiles`
+                            );
+                          }}
+                          className="px-3 py-1.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
+                        >
+                          Use Role Session
+                        </button>
+
+                        {/* Delete Profile from Supabase (Admin Only under RLS) */}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const { error } = await supabase
+                              .from("users_profiles")
+                              .delete()
+                              .eq("id", u.id);
+                            if (error) {
+                              flashBanner(error.message);
+                              return;
+                            }
+                            if (editingUserId === u.id) {
+                              resetUserProfileForm();
+                            }
+                            await refreshAll();
+                            flashBanner(
+                              `Deleted user profile "${u.full_name}" (#${u.id}) from public.users_profiles.`
+                            );
+                          }}
+                          className="px-2.5 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <select
-                        value={currentRole}
-                        onChange={async (e) => {
-                          const nextRole = normalizeRBACRole(e.target.value);
-                          await supabase
-                            .from("users_profiles")
-                            .update({
-                              role: nextRole,
-                              rbac_permissions: RBAC_ROLE_PERMISSIONS[nextRole],
-                            })
-                            .eq("id", u.id);
-                          refreshAll();
-                          flashBanner(
-                            `Updated ${u.full_name}'s role in public.users_profiles to ${nextRole}`
-                          );
-                        }}
-                        className="px-2.5 py-1.5 border border-stone-300 bg-stone-50 font-semibold"
-                      >
-                        {RBAC_ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            Role: {r}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={u.verification_status || "Verified"}
-                        onChange={async (e) => {
-                          await supabase
-                            .from("users_profiles")
-                            .update({ verification_status: e.target.value })
-                            .eq("id", u.id);
-                          refreshAll();
-                          flashBanner(
-                            `Updated verification status for ${u.full_name} to ${e.target.value}`
-                          );
-                        }}
-                        className="px-2.5 py-1.5 border border-stone-300 bg-white"
-                      >
-                        <option value="Verified">Verified</option>
-                        <option value="Under Review">Under Review</option>
-                        <option value="Rejected">Rejected</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const synced = await switchActiveRBACRole(currentRole);
-                          setActiveSession(synced);
-                          flashBanner(
-                            `Impersonating / Synced active session as ${u.full_name} (${currentRole})`
-                          );
-                        }}
-                        className="px-3 py-1.5 bg-[#064E3B] text-white font-semibold cursor-pointer"
-                      >
-                        Use Role Session
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await supabase.from("users_profiles").delete().eq("id", u.id);
-                          refreshAll();
-                        }}
-                        className="px-2.5 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 font-semibold cursor-pointer"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         </div>

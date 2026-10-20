@@ -1128,9 +1128,25 @@ export function isRealSupabaseConfigured(): boolean {
   return Boolean(rawSupabaseClient);
 }
 
-function resolveTableName(table: string): string {
-  if (table === 'user_profiles') return 'users_profiles';
-  return table;
+export function resolveTableName(table: string): string {
+  const map: Record<string, string> = {
+    user_profiles: "users_profiles",
+    users: "users_profiles",
+    magazine_posts: "articles",
+    lawyer_profiles: "lawyers",
+    forum_questions: "questions",
+    forum_answers: "questions",
+    legal_templates: "templates",
+    legal_acts: "laws",
+    legal_sections: "laws",
+    appointments_and_cases: "appointments",
+    escrow_transactions: "escrow_ledger",
+    chat_history: "ai_chat_histories",
+    pro_bono_applications: "probono_requests",
+    withdrawal_requests: "wallet_withdrawals",
+    messages: "chat_messages",
+  };
+  return map[table] || table;
 }
 
 function setLocalCacheOnly(table: string, data: any[]): void {
@@ -1411,12 +1427,55 @@ class HybridSupabaseQueryBuilder {
     return this;
   }
 
+  lte(column: string, value: number) {
+    this.filters.push({
+      column,
+      value,
+      fn: (row) => Number(row[column] ?? 0) <= Number(value),
+    });
+    return this;
+  }
+
+  gte(column: string, value: number) {
+    this.filters.push({
+      column,
+      value,
+      fn: (row) => Number(row[column] ?? 0) >= Number(value),
+    });
+    return this;
+  }
+
+  ilike(column: string, pattern: string) {
+    const clean = pattern.replace(/%/g, "").toLowerCase();
+    this.filters.push({
+      column,
+      value: pattern,
+      fn: (row) =>
+        String(row[column] ?? "")
+          .toLowerCase()
+          .includes(clean),
+    });
+    return this;
+  }
+
   single() {
     this.isSingle = true;
     return this;
   }
 
   async insert(rows: any[]) {
+    if (this.tableName === "users_profiles") {
+      for (const r of rows) {
+        const rlsCheck = evaluateUsersProfilesRLS("INSERT", r, r);
+        if (!rlsCheck.allowed) {
+          return {
+            data: null,
+            error: { code: "42501", message: rlsCheck.reason },
+          };
+        }
+      }
+    }
+
     const data = getTableData(this.tableName);
     const newItems = rows.map((r, i) => ({
       id: r.id || Date.now() + i,
@@ -1485,6 +1544,18 @@ class HybridSupabaseQueryBuilder {
     return {
       eq: async (column: string, value: any) => {
         const data = getTableData(this.tableName);
+        const targetRow = data.find((row) => String(row[column]) === String(value));
+
+        if (this.tableName === "users_profiles" && targetRow) {
+          const rlsCheck = evaluateUsersProfilesRLS("UPDATE", targetRow, updates);
+          if (!rlsCheck.allowed) {
+            return {
+              data: null,
+              error: { code: "42501", message: rlsCheck.reason },
+            };
+          }
+        }
+
         let found = false;
         const updated = data.map((row) => {
           if (String(row[column]) === String(value)) {
@@ -1524,6 +1595,18 @@ class HybridSupabaseQueryBuilder {
     return {
       eq: async (column: string, value: any) => {
         const data = getTableData(this.tableName);
+        const targetRow = data.find((row) => String(row[column]) === String(value));
+
+        if (this.tableName === "users_profiles") {
+          const rlsCheck = evaluateUsersProfilesRLS("DELETE", targetRow);
+          if (!rlsCheck.allowed) {
+            return {
+              data: null,
+              error: { code: "42501", message: rlsCheck.reason },
+            };
+          }
+        }
+
         const updated = data.filter((row) => String(row[column]) !== String(value));
         setLocalCacheOnly(this.tableName, updated);
 
@@ -1614,6 +1697,42 @@ export function createClient(_supabaseUrl?: string, _supabaseKey?: string) {
   void _supabaseKey;
   return {
     from: (tableName: string) => new HybridSupabaseQueryBuilder(tableName),
+    channel: (channelName: string) => {
+      let listenerCb: ((payload: any) => void) | null = null;
+      const handler = () => {
+        if (listenerCb) {
+          listenerCb({ new: {}, channel: channelName });
+        }
+      };
+      return {
+        on: (
+          _event: string,
+          _filter: Record<string, any>,
+          callback: (payload: any) => void
+        ) => {
+          listenerCb = callback;
+          if (typeof window !== "undefined") {
+            window.addEventListener("plp_data_updated", handler);
+          }
+          return {
+            subscribe: () => ({
+              unsubscribe: () => {
+                if (typeof window !== "undefined") {
+                  window.removeEventListener("plp_data_updated", handler);
+                }
+              },
+            }),
+          };
+        },
+        subscribe: () => ({
+          unsubscribe: () => {
+            if (typeof window !== "undefined") {
+              window.removeEventListener("plp_data_updated", handler);
+            }
+          },
+        }),
+      };
+    },
     storage: {
       from: (bucketName: string) => new HybridStorageBucket(bucketName),
       listBuckets: async () => ({ data: SUPABASE_STORAGE_BUCKETS, error: null }),
@@ -1740,22 +1859,6 @@ export function createClient(_supabaseUrl?: string, _supabaseKey?: string) {
         return { data: matched.slice(0, args?.match_count || 5), error: null };
       }
       return { data: [], error: null };
-    },
-    channel: (channelName: string) => {
-      if (rawSupabaseClient) {
-        return rawSupabaseClient.channel(channelName);
-      }
-      return {
-        on: function () {
-          return this;
-        },
-        subscribe: function () {
-          return this;
-        },
-        unsubscribe: function () {
-          return;
-        },
-      };
     },
   } as any;
 }
@@ -2023,6 +2126,279 @@ export async function verifyUserProfileRole(
     verifiedAt,
   };
 }
+
+/**
+ * Columns that a non-Admin authenticated user is allowed to update on their OWN `users_profiles` record
+ * under `users_profiles_update_own_or_admin` + `trg_enforce_users_profiles_self_update`.
+ */
+export const USERS_PROFILES_SELF_EDITABLE_COLUMNS = [
+  "full_name",
+  "city",
+  "phone",
+  "language_pref",
+  "theme_pref",
+  "notifications_enabled",
+  "interested_categories",
+  "bar_council_id",
+  "high_court",
+  "bar_license_url",
+  "deletion_requested",
+  "updated_at",
+] as const;
+
+export function isOwnUserProfileRecord(
+  profileRow: any,
+  session?: SyncedUserProfileSession | null
+): boolean {
+  const active = session ?? getActiveRBACSession();
+  if (!active || !profileRow) return false;
+  if (active.id && String(profileRow.id) === String(active.id)) return true;
+  const ident = String(active.phoneOrEmail || "").trim().toLowerCase();
+  if (!ident) return false;
+  if (profileRow.email && String(profileRow.email).toLowerCase() === ident) {
+    return true;
+  }
+  if (profileRow.phone && String(profileRow.phone).toLowerCase() === ident) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Evaluates Supabase Row Level Security (RLS) policies on `public.users_profiles`:
+ * - `Admin` role: Full CRUD authority (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) across all user records & role columns.
+ * - Non-Admin roles (`Client`, `Verified Advocate`, `Editorial Manager`):
+ *   - Cannot `DELETE` any user record (`users_profiles_delete_admin_only`).
+ *   - Cannot `INSERT` records for other users (`users_profiles_insert_admin_or_self_signup`).
+ *   - Can `UPDATE` ONLY their own profile record (`auth.uid() = auth_uid`), and ONLY non-privileged profile fields (`trg_enforce_users_profiles_self_update`).
+ */
+export function evaluateUsersProfilesRLS(
+  operation: "SELECT" | "INSERT" | "UPDATE" | "DELETE",
+  targetRow?: any,
+  updates?: any,
+  sessionOverride?: SyncedUserProfileSession | null
+): {
+  allowed: boolean;
+  policyName: string;
+  reason: string;
+} {
+  const active = sessionOverride !== undefined ? sessionOverride : getActiveRBACSession();
+  // If no session is initialized yet in the browser, default to Admin in the Admin CMS studio or allow initial seed
+  const callerRole: RBACRole = active ? normalizeRBACRole(active.rbacRole) : "Admin";
+
+  if (callerRole === "Admin") {
+    return {
+      allowed: true,
+      policyName: "users_profiles_admin_all_crud",
+      reason: "Admin role verified in public.users_profiles: full CRUD granted across all user records.",
+    };
+  }
+
+  const isOwn = isOwnUserProfileRecord(targetRow, active);
+
+  if (operation === "SELECT") {
+    return {
+      allowed: isOwn,
+      policyName: "users_profiles_select_own_or_admin",
+      reason: isOwn
+        ? "RLS SELECT allowed: reading own user_profiles record (auth.uid() = auth_uid)."
+        : `RLS Policy (users_profiles_select_own_or_admin): Role "${callerRole}" can only read their own profile record; Admin is required to inspect all user records.`,
+    };
+  }
+
+  if (operation === "DELETE") {
+    return {
+      allowed: false,
+      policyName: "users_profiles_delete_admin_only",
+      reason: `RLS Policy Violation (users_profiles_delete_admin_only): Role "${callerRole}" cannot delete records from public.users_profiles. Only "Admin" is permitted.`,
+    };
+  }
+
+  if (operation === "INSERT") {
+    if (isOwn && callerRole !== "Editorial Manager") {
+      return {
+        allowed: true,
+        policyName: "users_profiles_insert_admin_or_self_signup",
+        reason: "RLS INSERT allowed: self-onboarding profile creation.",
+      };
+    }
+    return {
+      allowed: false,
+      policyName: "users_profiles_insert_admin_or_self_signup",
+      reason: `RLS Policy Violation (users_profiles_insert_admin_or_self_signup): Role "${callerRole}" cannot create user profiles for other users. Only "Admin" can insert arbitrary user records.`,
+    };
+  }
+
+  if (operation === "UPDATE") {
+    if (!isOwn) {
+      return {
+        allowed: false,
+        policyName: "users_profiles_update_own_or_admin",
+        reason: `RLS Policy Violation (users_profiles_update_own_or_admin): Role "${callerRole}" cannot modify ${
+          targetRow?.full_name ? `"${targetRow.full_name}"` : "another user's record"
+        }. Non-Admin users may only update their own profile record (auth.uid() = auth_uid).`,
+      };
+    }
+
+    if (updates && targetRow) {
+      const roleChanged =
+        updates.role !== undefined &&
+        normalizeRBACRole(updates.role) !== normalizeRBACRole(targetRow.role);
+      const statusChanged =
+        updates.verification_status !== undefined &&
+        String(updates.verification_status) !==
+          String(targetRow.verification_status || "Verified");
+      const permsChanged =
+        updates.rbac_permissions !== undefined &&
+        JSON.stringify(updates.rbac_permissions) !==
+          JSON.stringify(targetRow.rbac_permissions || {});
+
+      if (roleChanged || statusChanged || permsChanged) {
+        return {
+          allowed: false,
+          policyName: "trg_enforce_users_profiles_self_update",
+          reason: `RLS Trigger Violation (trg_enforce_users_profiles_self_update): Role "${callerRole}" can update their own profile fields (full_name, city, phone, language_pref, theme_pref, interested_categories, notifications_enabled), but cannot modify privileged RBAC columns (role, rbac_permissions, verification_status). Only "Admin" can assign roles.`,
+        };
+      }
+    }
+
+    return {
+      allowed: true,
+      policyName: "users_profiles_update_own_or_admin",
+      reason: `RLS UPDATE allowed: "${callerRole}" updating own profile fields on public.users_profiles.`,
+    };
+  }
+
+  return {
+    allowed: false,
+    policyName: "users_profiles_rls_default_deny",
+    reason: "Operation denied by Row Level Security.",
+  };
+}
+
+export const USERS_PROFILES_RLS_SQL = `-- ============================================================================
+-- SUPABASE ROW LEVEL SECURITY (RLS) FOR public.users_profiles
+-- Enforces:
+--   1. Only 'Admin' role can perform full CRUD (SELECT, INSERT, UPDATE, DELETE)
+--      on other user records and assign RBAC roles / verification_status.
+--   2. Non-Admin users ('Client', 'Verified Advocate', 'Editorial Manager')
+--      can read and update ONLY their own profile fields (auth.uid() = auth_uid)
+--      and are blocked from altering role, rbac_permissions, or verification_status.
+-- ============================================================================
+
+ALTER TABLE public.users_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users_profiles FORCE ROW LEVEL SECURITY;
+
+-- Security Definer helper to check Admin status without recursive RLS loops
+CREATE OR REPLACE FUNCTION public.is_admin_user()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.users_profiles
+    WHERE auth_uid = auth.uid()
+      AND role = 'Admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.current_user_rbac_role()
+RETURNS TEXT
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT COALESCE(
+    (SELECT role FROM public.users_profiles WHERE auth_uid = auth.uid() LIMIT 1),
+    'Client'
+  );
+$$;
+
+-- 1. SELECT POLICY: Users read own profile; Admin reads all profiles
+DROP POLICY IF EXISTS "Users read own profile or Admin reads all" ON public.users_profiles;
+DROP POLICY IF EXISTS "users_profiles_select_own_or_admin" ON public.users_profiles;
+CREATE POLICY "users_profiles_select_own_or_admin"
+  ON public.users_profiles
+  FOR SELECT
+  USING (
+    auth.uid() = auth_uid
+    OR public.is_admin_user()
+  );
+
+-- 2. INSERT POLICY: Admin can insert any user profile; users can only insert their own initial signup row
+DROP POLICY IF EXISTS "Admin manages all user roles" ON public.users_profiles;
+DROP POLICY IF EXISTS "users_profiles_insert_admin_or_self_signup" ON public.users_profiles;
+CREATE POLICY "users_profiles_insert_admin_or_self_signup"
+  ON public.users_profiles
+  FOR INSERT
+  WITH CHECK (
+    public.is_admin_user()
+    OR (
+      auth.uid() = auth_uid
+      AND role IN ('Client', 'Verified Advocate')
+    )
+  );
+
+-- 3. UPDATE POLICY: Admin can update any user record; users can only update their own record
+DROP POLICY IF EXISTS "users_profiles_update_own_or_admin" ON public.users_profiles;
+CREATE POLICY "users_profiles_update_own_or_admin"
+  ON public.users_profiles
+  FOR UPDATE
+  USING (
+    auth.uid() = auth_uid
+    OR public.is_admin_user()
+  )
+  WITH CHECK (
+    auth.uid() = auth_uid
+    OR public.is_admin_user()
+  );
+
+-- 4. DELETE POLICY: Strictly only Admin can delete user records
+DROP POLICY IF EXISTS "users_profiles_delete_admin_only" ON public.users_profiles;
+CREATE POLICY "users_profiles_delete_admin_only"
+  ON public.users_profiles
+  FOR DELETE
+  USING (
+    public.is_admin_user()
+  );
+
+-- 5. COLUMN-LEVEL SECURITY TRIGGER: Prevent non-Admin users from modifying role, rbac_permissions, or verification_status
+CREATE OR REPLACE FUNCTION public.enforce_users_profiles_self_update_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF public.is_admin_user() THEN
+    RETURN NEW;
+  END IF;
+
+  IF auth.uid() IS DISTINCT FROM OLD.auth_uid THEN
+    RAISE EXCEPTION 'RLS Policy Violation (42501): Only Admin can update other user records in public.users_profiles.';
+  END IF;
+
+  IF NEW.role IS DISTINCT FROM OLD.role
+     OR NEW.rbac_permissions IS DISTINCT FROM OLD.rbac_permissions
+     OR NEW.verification_status IS DISTINCT FROM OLD.verification_status
+     OR NEW.auth_uid IS DISTINCT FROM OLD.auth_uid
+     OR NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'RLS Policy Violation (42501): Users can only update their own profile fields (full_name, city, phone, language_pref, theme_pref, notifications_enabled, interested_categories, bar_council_id, high_court, bar_license_url, deletion_requested). Role assignments require Admin.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_enforce_users_profiles_self_update ON public.users_profiles;
+CREATE TRIGGER trg_enforce_users_profiles_self_update
+  BEFORE UPDATE ON public.users_profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_users_profiles_self_update_fields();`;
 
 export const SUPABASE_FULL_SQL_SCHEMA = `-- ============================================================================
 -- THE DAILY LEGAL BRIEF (PAKISTAN) — 100% COMPLETE SUPABASE BACKEND BLUEPRINT
@@ -2505,12 +2881,9 @@ ALTER TABLE public.lawyer_network ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Verified Advocate & Admin access Lawyer Network" ON public.lawyer_network
   FOR ALL USING (public.current_user_rbac_role() IN ('Verified Advocate', 'Admin'));
 
--- Module 5: Admin Exclusive Control over Users Profiles & Role Assignments
-ALTER TABLE public.users_profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users read own profile or Admin reads all" ON public.users_profiles
-  FOR SELECT USING (auth.uid() = auth_uid OR public.current_user_rbac_role() = 'Admin');
-CREATE POLICY "Admin manages all user roles" ON public.users_profiles
-  FOR ALL USING (public.current_user_rbac_role() = 'Admin');
+-- Module 5: Row Level Security (RLS) on public.users_profiles
+-- Only Admin can perform CRUD on other user records & assign roles; users can only update their own profile fields
+${USERS_PROFILES_RLS_SQL}
 `;
 
 export default supabase;
