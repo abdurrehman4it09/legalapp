@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/app/supabase";
+import {
+  getSupabaseServiceRoleClient,
+  executeServerSideTableOperation,
+} from "@/lib/supabase";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const supabase = getSupabaseServiceRoleClient();
 
 /* ============================================================================
    MODULE 1: PUBLIC DISCOVERY SERVER ACTIONS (READ / SELECT)
@@ -762,3 +762,42 @@ export async function completeVideoConsultationServerAction(payload: {
   revalidatePath("/lawyer/dashboard");
   return { success: true, logRow };
 }
+
+/**
+ * Privileged Service-Role CRUD Server Action across all 23 platform tables
+ * (Admin CMS, Case Management, Escrow, Law Library, Forum, and Users & RBAC).
+ */
+export async function executeServiceRoleTableCrudAction(params: {
+  table: string;
+  operation: "SELECT" | "INSERT" | "UPSERT" | "UPDATE" | "DELETE";
+  payload?: any;
+  matchColumn?: string;
+  matchValue?: any;
+  revalidateRoutes?: string[];
+}) {
+  const result = await executeServerSideTableOperation({
+    table: params.table,
+    operation: params.operation,
+    payload: params.payload,
+    matchColumn: params.matchColumn,
+    matchValue: params.matchValue,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/urdu");
+  revalidatePath("/admin");
+  revalidatePath("/admin/cms");
+  revalidatePath("/admin/laws");
+  revalidatePath("/client/cases");
+  revalidatePath("/lawyer/dashboard");
+  revalidatePath("/lawyer/leads");
+
+  if (Array.isArray(params.revalidateRoutes)) {
+    for (const route of params.revalidateRoutes) {
+      revalidatePath(route);
+    }
+  }
+
+  return result;
+}
+

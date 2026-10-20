@@ -1111,13 +1111,30 @@ const inMemoryStore: Record<string, any[]> = {
 const STORAGE_VERSION = 'v6';
 
 const envSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const envSupabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const envSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const envSupabaseServiceRoleKey =
+  typeof window === 'undefined'
+    ? process.env.SUPABASE_SERVICE_ROLE_KEY
+    : undefined;
+const envSupabaseKey = envSupabaseServiceRoleKey || envSupabaseAnonKey;
 
 const rawSupabaseClient =
   envSupabaseUrl && envSupabaseUrl.startsWith('http') && envSupabaseKey
     ? (() => {
         try {
-          return createSupabaseClient(envSupabaseUrl, envSupabaseKey);
+          return createSupabaseClient(
+            envSupabaseUrl,
+            envSupabaseKey,
+            typeof window === 'undefined'
+              ? {
+                  auth: {
+                    autoRefreshToken: false,
+                    persistSession: false,
+                    detectSessionInUrl: false,
+                  },
+                }
+              : undefined
+          );
         } catch {
           return null;
         }
@@ -1692,9 +1709,14 @@ export function createMockClient() {
   return createClient();
 }
 
-export function createClient(_supabaseUrl?: string, _supabaseKey?: string) {
+export function createClient(
+  _supabaseUrl?: string,
+  _supabaseKey?: string,
+  _options?: Record<string, any>
+) {
   void _supabaseUrl;
   void _supabaseKey;
+  void _options;
   return {
     from: (tableName: string) => new HybridSupabaseQueryBuilder(tableName),
     channel: (channelName: string) => {
@@ -1813,6 +1835,102 @@ export function createClient(_supabaseUrl?: string, _supabaseKey?: string) {
           window.dispatchEvent(new Event('plp_data_updated'));
         }
         return { error: null };
+      },
+      getSession: async () => {
+        if (rawSupabaseClient) {
+          try {
+            const res = await rawSupabaseClient.auth.getSession();
+            if (res?.data?.session) return res;
+          } catch {
+            // fallback to hybrid session
+          }
+        }
+        const active = getActiveRBACSession();
+        return {
+          data: {
+            session: active
+              ? {
+                  user: {
+                    id: String(active.id || ''),
+                    email: active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                    phone: !active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                    user_metadata: {
+                      role: active.rbacRole,
+                      full_name: active.name,
+                      city: active.city,
+                    },
+                  },
+                }
+              : null,
+          },
+          error: null,
+        };
+      },
+      getUser: async () => {
+        if (rawSupabaseClient) {
+          try {
+            const res = await rawSupabaseClient.auth.getUser();
+            if (res?.data?.user) return res;
+          } catch {
+            // fallback to hybrid user
+          }
+        }
+        const active = getActiveRBACSession();
+        return {
+          data: {
+            user: active
+              ? {
+                  id: String(active.id || ''),
+                  email: active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                  phone: !active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                  user_metadata: {
+                    role: active.rbacRole,
+                    full_name: active.name,
+                    city: active.city,
+                  },
+                }
+              : null,
+          },
+          error: null,
+        };
+      },
+      onAuthStateChange: (
+        callback: (event: string, session: any) => void
+      ) => {
+        let rawSub: { unsubscribe?: () => void } | null = null;
+        if (rawSupabaseClient?.auth?.onAuthStateChange) {
+          try {
+            const { data } = rawSupabaseClient.auth.onAuthStateChange(
+              (event: string, sess: any) => {
+                callback(event, sess);
+              }
+            );
+            rawSub = data?.subscription || null;
+          } catch {
+            // ignore
+          }
+        }
+        const handleLocalAuthChange = () => {
+          const active = getActiveRBACSession();
+          callback(active ? 'TOKEN_REFRESHED' : 'SIGNED_OUT', active);
+        };
+        if (typeof window !== 'undefined') {
+          window.addEventListener('plp_data_updated', handleLocalAuthChange);
+          window.addEventListener('storage', handleLocalAuthChange);
+        }
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {
+                rawSub?.unsubscribe?.();
+                if (typeof window !== 'undefined') {
+                  window.removeEventListener('plp_data_updated', handleLocalAuthChange);
+                  window.removeEventListener('storage', handleLocalAuthChange);
+                }
+              },
+            },
+          },
+        };
       },
     },
     rpc: async (fnName: string, args?: Record<string, any>) => {
@@ -2037,8 +2155,8 @@ export async function switchActiveRBACRole(
 }
 
 /**
- * Queries `supabase.from("user_profiles")` directly on every login and route/module guard check
- * to verify `user_profiles.role` against the authoritative User Profiles table.
+ * Queries `supabase.from("users_profiles")` directly on every session load, login, and route/module guard check
+ * to verify `users_profiles.role` against the authoritative User Profiles table.
  */
 export async function verifyUserProfileRole(
   sessionOrIdentifier?: SyncedUserProfileSession | string | null
@@ -2060,10 +2178,10 @@ export async function verifyUserProfileRole(
       ? sessionOrIdentifier.trim().toLowerCase()
       : String(active?.phoneOrEmail || "").trim().toLowerCase();
 
-  const { data: profiles } = await supabase.from("user_profiles").select("*");
+  const { data: profiles } = await supabase.from("users_profiles").select("*");
   const rows: any[] = Array.isArray(profiles)
     ? profiles
-    : getTableData("user_profiles");
+    : getTableData("users_profiles");
 
   const matchedRow = rows.find(
     (p) =>

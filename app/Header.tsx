@@ -27,7 +27,9 @@ import {
   RBAC_ROLES,
   RBAC_ROLE_PERMISSIONS,
   normalizeRBACRole,
-} from "./supabase";
+} from "@/lib/supabase";
+import { useAuthRBAC } from "./AuthContext";
+import { SEO_61_SCREENS_CATALOG } from "./seo";
 
 export default function Header({
   lang = "en",
@@ -53,11 +55,25 @@ export default function Header({
   const [themeSheetOpen, setThemeSheetOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [rbacModalOpen, setRbacModalOpen] = useState(false);
+  const [seoModalOpen, setSeoModalOpen] = useState(false);
+  const [seoModuleFilter, setSeoModuleFilter] = useState<number | "ALL">("ALL");
 
+  const {
+    session: rbacSession,
+    role: verifiedRole,
+    verifyProfileRole,
+    switchRoleAndVerify,
+    logout: rbacLogout,
+    lastVerifiedAt,
+  } = useAuthRBAC();
   const [theme, setTheme] = useState<"paper" | "light" | "dark">("paper");
   const [session, setSession] = useState<UserSession | null>(null);
   const [siteSettings, setSiteSettings] = useState<any>(() => getSiteSettings());
   const [notifications, setNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    setSession(rbacSession || getActiveRBACSession());
+  }, [rbacSession]);
 
   useEffect(() => {
     const syncData = () => {
@@ -130,11 +146,8 @@ export default function Header({
     }
   };
 
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("plp_user_session");
-      window.dispatchEvent(new Event("plp_data_updated"));
-    }
+  const handleLogout = async () => {
+    await rbacLogout();
     setSession(null);
     setLogoutModalOpen(false);
   };
@@ -349,6 +362,13 @@ export default function Header({
 
         {/* Master Database-to-Route Mapping Strip (Modules 1 to 5) */}
         <div className="max-w-7xl mx-auto pt-2 mt-2 border-t border-stone-200/80 flex items-center gap-2 overflow-x-auto text-[11px]">
+          <button
+            type="button"
+            onClick={() => setSeoModalOpen(true)}
+            className="px-2.5 py-0.5 bg-[#064E3B] text-white hover:bg-emerald-950 font-semibold shrink-0 cursor-pointer"
+          >
+            SEO Metadata (All 61 Routes)
+          </button>
           <span className="font-mono-code font-bold text-[#064E3B] uppercase tracking-wider shrink-0">
             DB→Route Map:
           </span>
@@ -771,7 +791,7 @@ export default function Header({
                     <button
                       type="button"
                       onClick={async () => {
-                        const synced = await switchActiveRBACRole(r);
+                        const synced = await switchRoleAndVerify(r);
                         setSession(synced);
                         setRbacModalOpen(false);
                       }}
@@ -791,9 +811,23 @@ export default function Header({
             </div>
 
             <div className="pt-3 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="text-stone-600">
-                All role switches upsert directly into <code>public.users_profiles</code> and update module guards in real time.
-              </span>
+              <div className="flex flex-wrap items-center gap-2 text-stone-600">
+                <span>
+                  Verified role: <strong>{verifiedRole}</strong>
+                  {lastVerifiedAt && (
+                    <span className="ml-1 font-mono-code text-[10px] text-stone-500">
+                      ({new Date(lastVerifiedAt).toLocaleTimeString()})
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => verifyProfileRole()}
+                  className="px-2 py-0.5 border border-stone-300 bg-white text-[11px] font-semibold text-[#064E3B] hover:border-[#064E3B] cursor-pointer"
+                >
+                  Re-Verify users_profiles
+                </button>
+              </div>
               <Link
                 href="/admin"
                 onClick={() => setRbacModalOpen(false)}
@@ -801,6 +835,128 @@ export default function Header({
               >
                 Open Admin Users & RBAC Manager →
               </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 61-Route Dynamic SEO & generateMetadata Inspector Modal */}
+      {seoModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-stone-950/75 flex items-center justify-center p-4 font-ui"
+          onClick={() => setSeoModalOpen(false)}
+        >
+          <div
+            className="bg-[#FBF9F5] border-2 border-stone-900 max-w-6xl w-full max-h-[88vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#064E3B] text-white px-6 py-4 flex items-center justify-between border-b border-stone-800">
+              <div>
+                <div className="text-[11px] font-mono-code uppercase tracking-widest text-[#D4AF37]">
+                  Next.js App Router • Server-Side generateMetadata() • 61 Legal Routes
+                </div>
+                <h3 className="text-lg font-bold font-legal mt-0.5">
+                  Pakistan Legal Search Intent SEO Registry (Screens 01–61)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSeoModalOpen(false)}
+                className="p-1.5 text-stone-200 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-3 bg-white border-b border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(["ALL", 1, 2, 3, 4, 5] as const).map((m) => (
+                  <button
+                    key={String(m)}
+                    type="button"
+                    onClick={() => setSeoModuleFilter(m)}
+                    className={`px-3 py-1 border font-semibold cursor-pointer ${
+                      seoModuleFilter === m
+                        ? "bg-[#064E3B] text-white border-[#064E3B]"
+                        : "bg-stone-50 text-stone-700 border-stone-300 hover:border-stone-500"
+                    }`}
+                  >
+                    {m === "ALL" ? "All 61 Routes" : `Module ${m}`}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-stone-600 font-mono-code">
+                OpenGraph + Twitter Summary Card + Schema.org JSON-LD Enabled
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-3">
+              {Object.values(SEO_61_SCREENS_CATALOG)
+                .filter(
+                  (item) =>
+                    seoModuleFilter === "ALL" ||
+                    item.moduleNumber === seoModuleFilter
+                )
+                .map((item) => {
+                  const navHref = item.routePattern
+                    .replace("[id]", "1")
+                    .replace("[bookingId]", "BK-9012")
+                    .replace("[caseId]", "CASE-LHR-2026-09");
+                  return (
+                    <div
+                      key={item.screenNumber}
+                      className="bg-white border border-stone-300 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1.5 max-w-4xl">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono-code">
+                          <span className="px-2 py-0.5 bg-[#064E3B] text-white font-bold">
+                            Screen {String(item.screenNumber).padStart(2, "0")}
+                          </span>
+                          <span className="px-2 py-0.5 bg-amber-50 text-[#B48327] border border-[#B48327]/40 font-semibold">
+                            Module {item.moduleNumber}
+                          </span>
+                          <span className="text-stone-900 font-bold">
+                            {item.routePattern}
+                          </span>
+                          <span className="text-stone-500">
+                            • Schema: {item.schemaType}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-[#1a0dab] font-legal">
+                          {item.title}{" "}
+                          <span className="text-[11px] font-mono-code font-normal text-stone-500">
+                            ({item.title.length} chars)
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-700 leading-relaxed">
+                          {item.description}{" "}
+                          <span className="text-[11px] font-mono-code text-stone-400">
+                            ({item.description.length} chars)
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {item.keywords.map((kw) => (
+                            <span
+                              key={kw}
+                              className="px-2 py-0.5 bg-stone-100 border border-stone-200 text-[10px] text-stone-700"
+                            >
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <Link
+                          href={navHref}
+                          onClick={() => setSeoModalOpen(false)}
+                          className="inline-block px-3.5 py-2 bg-[#064E3B] text-white text-xs font-semibold hover:bg-emerald-950"
+                        >
+                          Open Route →
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </div>
