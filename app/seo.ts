@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase";
+import { getTableData } from "@/lib/supabase";
 
 const SITE_NAME = "The Daily Legal Brief Pakistan";
 const BASE_URL =
@@ -942,43 +942,45 @@ export function buildMetadataFromScreen(
 }
 
 /**
- * Dynamic Metadata Builders for Parameterized Routes (fetches real record titles from Supabase)
+ * Dynamic Metadata Builders for Parameterized Routes
  */
 export async function generateMagazineArticleMetadata(
   id: string,
   isUrdu = false
 ): Promise<Metadata> {
-  const supabase = createClient();
-  const { data: post } = await supabase
-    .from("magazine_posts")
-    .select("*")
-    .eq("id", id)
-    .single();
+  try {
+    const posts = getTableData("magazine_posts");
+    const post = posts.find(
+      (p) => String(p.id) === String(id) || String(p.slug) === String(id)
+    );
 
-  if (post) {
-    const rawTitle = isUrdu && post.title_urdu ? post.title_urdu : post.title;
-    const category = post.category || "Supreme Court Analysis";
-    const title = `${String(rawTitle).slice(0, 42)} | ${category} PK`;
-    const rawSummary =
-      (isUrdu && post.summary_urdu ? post.summary_urdu : post.summary) ||
-      post.content ||
-      "";
-    const description =
-      String(rawSummary).slice(0, 145) ||
-      SEO_61_SCREENS_CATALOG[4].description;
+    if (post) {
+      const rawTitle = isUrdu && post.title_urdu ? post.title_urdu : post.title;
+      const category = post.category || "Supreme Court Analysis";
+      const title = `${String(rawTitle).slice(0, 42)} | ${category} PK`;
+      const rawSummary =
+        (isUrdu && post.summary_urdu ? post.summary_urdu : post.summary) ||
+        post.content ||
+        "";
+      const description =
+        String(rawSummary).slice(0, 145) ||
+        SEO_61_SCREENS_CATALOG[4].description;
 
-    return buildMetadataFromScreen(4, {
-      title,
-      description,
-      canonicalPath: isUrdu ? `/urdu/article/${id}` : `/magazine/${id}`,
-      ogType: "article",
-      keywords: [
-        category,
-        post.author || "High Court Advocate",
-        "Pakistan Legal Journal",
-        "Supreme Court of Pakistan",
-      ],
-    });
+      return buildMetadataFromScreen(4, {
+        title,
+        description,
+        canonicalPath: isUrdu ? `/urdu/article/${id}` : `/magazine/${id}`,
+        ogType: "article",
+        keywords: [
+          category,
+          post.author || post.author_name || "High Court Advocate",
+          "Pakistan Legal Journal",
+          "Supreme Court of Pakistan",
+        ],
+      });
+    }
+  } catch {
+    // Fallback to default screen metadata
   }
 
   return buildMetadataFromScreen(4, {
@@ -991,34 +993,37 @@ export async function generateLawDetailMetadata(
   id: string,
   isUrdu = false
 ): Promise<Metadata> {
-  const supabase = createClient();
-  const { data: law } = await supabase
-    .from("legal_acts")
-    .select("*")
-    .eq("id", id)
-    .single();
+  try {
+    const laws = getTableData("legal_acts");
+    const law = laws.find(
+      (l) => String(l.id) === String(id) || String(l.slug) === String(id)
+    );
 
-  if (law) {
-    const rawTitle = isUrdu && law.title_urdu ? law.title_urdu : law.title;
-    const sec = law.section_number ? `${law.section_number} – ` : "";
-    const title = `${sec}${String(rawTitle).slice(0, 38)} | Pakistan Code`;
-    const rawDesc =
-      (isUrdu && law.content_urdu ? law.content_urdu : law.content || law.description) ||
-      "";
-    const description =
-      String(rawDesc).slice(0, 150) || SEO_61_SCREENS_CATALOG[12].description;
+    if (law) {
+      const rawTitle = isUrdu && law.title_urdu ? law.title_urdu : law.title;
+      const sec = law.section_number ? `${law.section_number} – ` : "";
+      const title = `${sec}${String(rawTitle).slice(0, 38)} | Pakistan Code`;
+      const rawDesc =
+        (isUrdu && law.content_urdu
+          ? law.content_urdu
+          : law.content || law.description || law.plain_summary_en) || "";
+      const description =
+        String(rawDesc).slice(0, 150) || SEO_61_SCREENS_CATALOG[12].description;
 
-    return buildMetadataFromScreen(12, {
-      title,
-      description,
-      canonicalPath: isUrdu ? `/urdu/laws/${id}` : `/laws/${id}`,
-      keywords: [
-        law.section_number || "Pakistan Statute",
-        law.category || "Pakistan Penal Code",
-        "Pakistan Code full text",
-        "High Court commentary",
-      ],
-    });
+      return buildMetadataFromScreen(12, {
+        title,
+        description,
+        canonicalPath: isUrdu ? `/urdu/laws/${id}` : `/laws/${id}`,
+        keywords: [
+          law.section_number || "Pakistan Statute",
+          law.category || "Pakistan Penal Code",
+          "Pakistan Code full text",
+          "High Court commentary",
+        ],
+      });
+    }
+  } catch {
+    // Fallback to default screen metadata
   }
 
   return buildMetadataFromScreen(12, {
@@ -1030,44 +1035,49 @@ export async function generateLawyerProfileMetadata(
   id: string,
   isBooking = false
 ): Promise<Metadata> {
-  const supabase = createClient();
-  const { data: lawyer } = await supabase
-    .from("lawyer_profiles")
-    .select("*")
-    .eq("id", id)
-    .single();
+  try {
+    const lawyers = getTableData("lawyer_profiles");
+    const lawyer = lawyers.find(
+      (l) => String(l.id) === String(id) || String(l.slug) === String(id)
+    );
 
-  if (lawyer) {
-    const name = lawyer.name || "Verified High Court Advocate";
-    const spec = lawyer.specialization || "Legal Counsel";
-    const loc = lawyer.location || "Pakistan";
-    const fee = lawyer.hourly_rate || "PKR 15,000";
+    if (lawyer) {
+      const name = lawyer.name || "Verified High Court Advocate";
+      const spec =
+        lawyer.specialization || lawyer.specialty || "Legal Counsel";
+      const loc = lawyer.location || lawyer.city || "Pakistan";
+      const fee =
+        lawyer.hourly_rate ||
+        `PKR ${Number(lawyer.hourly_fee_pkr ?? lawyer.fee ?? 15000).toLocaleString()}`;
 
-    if (isBooking) {
-      return buildMetadataFromScreen(22, {
-        title: `Book ${name} (${spec}, ${loc}) | Legal Brief`,
-        description: `Schedule an escrow-protected video or chamber consultation with ${name}, Bar-verified ${spec} advocate in ${loc} (${fee}).`,
-        canonicalPath: `/lawyers/${id}/book`,
+      if (isBooking) {
+        return buildMetadataFromScreen(22, {
+          title: `Book ${name} (${spec}, ${loc}) | Legal Brief`,
+          description: `Schedule an escrow-protected video or chamber consultation with ${name}, Bar-verified ${spec} advocate in ${loc} (${fee}).`,
+          canonicalPath: `/lawyers/${id}/book`,
+          keywords: [
+            `book ${name}`,
+            `${spec} lawyer ${loc}`,
+            "online legal appointment Pakistan",
+          ],
+        });
+      }
+
+      return buildMetadataFromScreen(21, {
+        title: `${name} – ${spec} Advocate in ${loc} | Pakistan`,
+        description: `Consult ${name}, Bar-verified ${spec} lawyer in ${loc} (${lawyer.experience || "10+ Years"} experience). View court credentials and book online.`,
+        canonicalPath: `/lawyers/${id}`,
+        ogType: "profile",
         keywords: [
-          `book ${name}`,
-          `${spec} lawyer ${loc}`,
-          "online legal appointment Pakistan",
+          name,
+          `${spec} lawyer in ${loc}`,
+          lawyer.bar_council || lawyer.bar_council_id || "High Court Advocate",
+          "verified lawyer Pakistan",
         ],
       });
     }
-
-    return buildMetadataFromScreen(21, {
-      title: `${name} – ${spec} Advocate in ${loc} | Pakistan`,
-      description: `Consult ${name}, Bar-verified ${spec} lawyer in ${loc} (${lawyer.experience || "10+ Years"} experience). View court credentials and book online.`,
-      canonicalPath: `/lawyers/${id}`,
-      ogType: "profile",
-      keywords: [
-        name,
-        `${spec} lawyer in ${loc}`,
-        lawyer.bar_council || "High Court Advocate",
-        "verified lawyer Pakistan",
-      ],
-    });
+  } catch {
+    // Fallback to default screen metadata
   }
 
   return buildMetadataFromScreen(isBooking ? 22 : 21, {

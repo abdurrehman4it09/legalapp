@@ -2,9 +2,14 @@ import {
   createClient as createHybridSupabaseClient,
   isRealSupabaseConfigured,
   resolveTableName,
+  resolveRemoteSupabaseTableName,
+  normalizeRecordForTable,
+  normalizeRecordsForTable,
   getTableData,
   saveTableData,
   resetAllPlatformData,
+  syncAllTablesFromSupabase,
+  pushAllTablesToSupabase,
   getSiteSettings,
   saveSiteSettings,
   RBAC_ROLES,
@@ -61,12 +66,7 @@ export const SERVER_SERVICE_ROLE_OPTIONS = {
 /**
  * Secure Server-Side Supabase Service Role Client (`supabaseAdmin`)
  * Initialized with `process.env.SUPABASE_SERVICE_ROLE_KEY` (falling back to `NEXT_PUBLIC_SUPABASE_ANON_KEY`
- * in local environments) for privileged server-side data operations across all modules:
- * - Module 1: Public Discovery (`magazine_posts`, `lawyer_profiles`, `forum_questions`, `legal_acts`, `legal_templates`)
- * - Module 2: Authentication & RBAC (`users_profiles`, `lawyer_documents`)
- * - Module 3: Client Workspace & Case Management (`appointments_and_cases`, `escrow_transactions`, `pro_bono_applications`)
- * - Module 4: Lawyer CRM & Case Milestones (`case_milestones`, `crm_leads`, `lawyer_availability`, `withdrawal_requests`)
- * - Module 5: Admin CMS, Law Library & Realtime Comms (`magazine_posts`, `legal_acts`, `messages`, `video_consultation_logs`, `notifications`)
+ * in local environments) for privileged server-side data operations across all modules.
  */
 export const supabaseAdmin = createHybridSupabaseClient(
   SUPABASE_ENV.url,
@@ -161,20 +161,19 @@ export async function executeServerSideTableOperation(params: {
       const rows = Array.isArray(params.payload)
         ? params.payload
         : [params.payload];
-      return await client.from(canonicalTable).insert(rows).select();
+      return await client.from(canonicalTable).insert(rows);
     }
     case "UPSERT": {
       const rows = Array.isArray(params.payload)
         ? params.payload
         : [params.payload];
-      return await client.from(canonicalTable).upsert(rows).select();
+      return await client.from(canonicalTable).upsert(rows);
     }
     case "UPDATE": {
       return await client
         .from(canonicalTable)
         .update(params.payload || {})
-        .eq(col, params.matchValue)
-        .select();
+        .eq(col, params.matchValue);
     }
     case "DELETE": {
       return await client
@@ -219,9 +218,14 @@ export function getSupabaseConnectionStatus() {
 export {
   isRealSupabaseConfigured,
   resolveTableName,
+  resolveRemoteSupabaseTableName,
+  normalizeRecordForTable,
+  normalizeRecordsForTable,
   getTableData,
   saveTableData,
   resetAllPlatformData,
+  syncAllTablesFromSupabase,
+  pushAllTablesToSupabase,
   getSiteSettings,
   saveSiteSettings,
   RBAC_ROLES,

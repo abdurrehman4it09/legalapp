@@ -1687,6 +1687,27 @@ export function isRealSupabaseConfigured(): boolean {
   return Boolean(rawSupabaseClient);
 }
 
+const PRODUCTION_18_TABLES = [
+  "users",
+  "lawyers",
+  "lawyer_availability",
+  "laws",
+  "legal_sections",
+  "court_judgments",
+  "articles",
+  "legal_templates",
+  "forum_questions",
+  "forum_answers",
+  "appointments_and_cases",
+  "case_milestones",
+  "escrow_transactions",
+  "withdrawal_requests",
+  "pro_bono_applications",
+  "chat_messages",
+  "ai_chat_logs",
+  "notifications",
+] as const;
+
 export function resolveTableName(table: string): string {
   const map: Record<string, string> = {
     user_profiles: "users_profiles",
@@ -1710,36 +1731,473 @@ export function resolveTableName(table: string): string {
   return map[table] || table;
 }
 
+/**
+ * Resolves any internal or legacy table alias to the exact 18-table production
+ * Supabase PostgreSQL table name so live Supabase queries hit the real schema.
+ */
+export function resolveRemoteSupabaseTableName(table: string): string {
+  const map: Record<string, string> = {
+    users_profiles: "users",
+    user_profiles: "users",
+    users: "users",
+    lawyers: "lawyers",
+    lawyer_profiles: "lawyers",
+    lawyer_availability: "lawyer_availability",
+    laws: "laws",
+    legal_acts: "laws",
+    legal_sections: "legal_sections",
+    court_judgments: "court_judgments",
+    ai_citations: "court_judgments",
+    articles: "articles",
+    magazine_posts: "articles",
+    legal_templates: "legal_templates",
+    templates: "legal_templates",
+    forum_questions: "forum_questions",
+    questions: "forum_questions",
+    forum_answers: "forum_answers",
+    appointments_and_cases: "appointments_and_cases",
+    appointments: "appointments_and_cases",
+    case_milestones: "case_milestones",
+    escrow_transactions: "escrow_transactions",
+    escrow_ledger: "escrow_transactions",
+    withdrawal_requests: "withdrawal_requests",
+    wallet_withdrawals: "withdrawal_requests",
+    pro_bono_applications: "pro_bono_applications",
+    probono_requests: "pro_bono_applications",
+    chat_messages: "chat_messages",
+    messages: "chat_messages",
+    ai_chat_logs: "ai_chat_logs",
+    ai_chat_histories: "ai_chat_logs",
+    chat_history: "ai_chat_logs",
+    notifications: "notifications",
+  };
+  return map[table] || table;
+}
+
+function safeLocalStorageGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith("plp_store_") && !k.startsWith(`plp_store_${STORAGE_VERSION}_`)) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Ignore quota errors; inMemoryStore remains authoritative
+    }
+  }
+}
+
+function safeLocalStorageRemove(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore
+  }
+}
+
+/**
+ * Normalizes any record from either the 18-table live Supabase schema or local seed data
+ * so that both 18-table column names AND legacy UI property names are always defined.
+ */
+export function normalizeRecordForTable(table: string, rawRow: any): any {
+  if (!rawRow || typeof rawRow !== "object") return rawRow;
+  const canonical = resolveTableName(table);
+  const r = { ...rawRow };
+
+  if (!r.created_at) {
+    r.created_at = new Date().toISOString();
+  }
+
+  switch (canonical) {
+    case "templates": {
+      const priceVal = Number(r.price_pkr ?? r.price ?? 0);
+      const pagesVal = Number(r.pages ?? 4);
+      const downloadsVal = Number(r.download_count ?? r.downloads ?? 0);
+      const titleEn = r.title_en || r.title || "Legal Agreement Template";
+      const titleUr = r.title_ur || r.title_urdu || titleEn;
+      const descEn = r.description_en || r.summary || "Verified bilingual Pakistani legal draft.";
+      const descUr = r.description_ur || r.summary_urdu || descEn;
+      const previewEn = r.preview_text_en || r.preview_text || r.preview_excerpt || descEn;
+      const previewUr = r.preview_text_ur || descUr;
+      return {
+        ...r,
+        title: titleEn,
+        title_en: titleEn,
+        title_urdu: titleUr,
+        title_ur: titleUr,
+        category: r.category || "Property & Conveyancing",
+        category_urdu: r.category_urdu || "قانونی دستاویز",
+        price: priceVal,
+        price_pkr: priceVal,
+        is_free: Boolean(r.is_free ?? priceVal === 0),
+        pages: pagesVal,
+        downloads: downloadsVal,
+        download_count: downloadsVal,
+        summary: descEn,
+        description_en: descEn,
+        summary_urdu: descUr,
+        description_ur: descUr,
+        preview_text: previewEn,
+        preview_excerpt: previewEn,
+        preview_text_en: previewEn,
+        preview_text_ur: previewUr,
+        file_download_url: r.file_download_url || r.pdf_storage_url || "/templates/sample.docx",
+        pdf_storage_url: r.pdf_storage_url || r.file_download_url || "/templates/sample.docx",
+        preview_clauses: Array.isArray(r.preview_clauses)
+          ? r.preview_clauses
+          : [previewEn],
+      };
+    }
+
+    case "articles": {
+      const titleEn = r.title || "Supreme Court Constitutional & Statutory Analysis";
+      const titleUr = r.title_urdu || titleEn;
+      const authorName = r.author_name || r.author || "Editorial Law Desk";
+      const readMins = Number(
+        r.read_time_minutes ?? (parseInt(String(r.read_time || "6"), 10) || 6)
+      );
+      const readTimeStr = r.read_time || `${readMins} min read`;
+      const contentEn = r.content || r.summary || "";
+      const subtitleEn =
+        r.subtitle ||
+        r.summary ||
+        (contentEn ? String(contentEn).slice(0, 180) : "In-depth analysis of recent Pakistani appellate jurisprudence.");
+      return {
+        ...r,
+        title: titleEn,
+        title_urdu: titleUr,
+        subtitle: subtitleEn,
+        subtitle_urdu: r.subtitle_urdu || titleUr,
+        summary: r.summary || subtitleEn,
+        summary_urdu: r.summary_urdu || r.subtitle_urdu || titleUr,
+        category: r.category || "Constitutional Law",
+        category_urdu: r.category_urdu || "آئینی قانون",
+        author: authorName,
+        author_name: authorName,
+        author_urdu: r.author_urdu || authorName,
+        author_role: r.author_role || "Advocate High Court",
+        read_time_minutes: readMins,
+        read_time: readTimeStr,
+        read_time_urdu: r.read_time_urdu || `${readMins} منٹ کا مطالعہ`,
+        content: contentEn,
+        content_urdu: r.content_urdu || contentEn,
+        thumbnail_url: r.thumbnail_url || r.image_url || "",
+        video_reel_url: r.video_reel_url || r.media_url || "",
+        audio_brief_url: r.audio_brief_url || "",
+        status: r.status || "published",
+        view_count: Number(r.view_count ?? 120),
+      };
+    }
+
+    case "lawyers": {
+      const feeVal = Number(r.hourly_fee_pkr ?? r.fee ?? 15000);
+      const ratingVal = Number(r.rating_avg ?? r.rating ?? 4.9);
+      const expYears = Number(
+        r.experience_years ?? (parseInt(String(r.experience || "10"), 10) || 10)
+      );
+      const specEn = r.specialty || r.specialization || "Constitutional & Civil Litigation";
+      const specUr = r.specialty_urdu || r.specialization_urdu || "آئینی اور دیوانی مقدمات";
+      const verStatus = String(r.verification_status || "verified");
+      const isVerified =
+        r.verified !== undefined
+          ? Boolean(r.verified)
+          : verStatus.toLowerCase() === "verified";
+      const proBono = Boolean(r.pro_bono_opt_in ?? r.pro_bono ?? false);
+      return {
+        ...r,
+        name: r.name || "Advocate High Court",
+        name_urdu: r.name_urdu || r.name || "ایڈووکیٹ ہائی کورٹ",
+        specialty: specEn,
+        specialization: specEn,
+        specialty_urdu: specUr,
+        specialization_urdu: specUr,
+        city: r.city || "Islamabad",
+        city_urdu: r.city_urdu || r.city || "اسلام آباد",
+        location: r.location || `${r.city || "Islamabad"} High Court Bar`,
+        court: r.court || r.location || "High Court of Pakistan",
+        court_urdu: r.court_urdu || "ہائی کورٹ آف پاکستان",
+        experience_years: expYears,
+        experience: r.experience || `${expYears} Years`,
+        hourly_fee_pkr: feeVal,
+        fee: feeVal,
+        hourly_rate: `PKR ${feeVal.toLocaleString()}`,
+        success_rate: Number(r.success_rate ?? 94),
+        rating_avg: ratingVal,
+        rating: ratingVal,
+        reviews_count: Number(r.reviews_count ?? 18),
+        reputation_points: Number(r.reputation_points ?? r.reputation_score ?? 950),
+        reputation_score: Number(r.reputation_points ?? r.reputation_score ?? 950),
+        badges: Array.isArray(r.badges) ? r.badges : ["Bar Verified", "High Court"],
+        verified: isVerified,
+        verification_status: verStatus,
+        pro_bono_opt_in: proBono,
+        pro_bono: proBono,
+        bar_council_id: r.bar_council_id || r.bar_And_license || "PBC-HC-2018",
+        bar_And_license: r.bar_And_license || r.bar_council_id || "PBC-HC-2018",
+        license_doc_url: r.license_doc_url || r.license_storage_url || "",
+        license_storage_url: r.license_storage_url || r.license_doc_url || "",
+        bio: r.bio || r.intro || "Senior Advocate practicing before the High Courts of Pakistan.",
+        bio_urdu: r.bio_urdu || r.intro_urdu || r.bio || "",
+        intro: r.intro || r.bio || "",
+        intro_urdu: r.intro_urdu || r.bio_urdu || "",
+        wallet_balance_pkr: Number(r.wallet_balance_pkr ?? 125000),
+        escrow_pending_pkr: Number(r.escrow_pending_pkr ?? 45000),
+      };
+    }
+
+    case "laws": {
+      const yearStr = String(r.promulgation_year ?? r.year ?? "1973");
+      const secStr = String(r.section_number ?? r.section_count ?? "Part I");
+      const summaryEn = r.plain_summary_en || r.description || r.commentary || r.content || "";
+      const summaryUr = r.plain_summary_ur || r.description_urdu || r.commentary_urdu || r.content_urdu || summaryEn;
+      return {
+        ...r,
+        title: r.title || "Pakistan Statutory Act",
+        title_urdu: r.title_urdu || r.title || "مجموعہ قوانین پاکستان",
+        category: r.category || "Criminal & Penal Law",
+        category_urdu: r.category_urdu || "فوجداری قانون",
+        promulgation_year: parseInt(yearStr, 10) || 1973,
+        year: yearStr,
+        section_number: secStr,
+        section_count: secStr,
+        description: summaryEn,
+        description_urdu: summaryUr,
+        plain_summary_en: summaryEn,
+        plain_summary_ur: summaryUr,
+        content: r.content || summaryEn,
+        content_urdu: r.content_urdu || summaryUr,
+        commentary: r.commentary || summaryEn,
+        commentary_urdu: r.commentary_urdu || summaryUr,
+        is_bailable: r.is_bailable ?? true,
+        max_punishment: r.max_punishment || "As prescribed by statute",
+        trial_court: r.trial_court || "Court of Sessions / Magistrate",
+      };
+    }
+
+    case "questions": {
+      const authorName = r.asker_display_name || r.author_name || (r.is_anonymous ? "Anonymous Citizen" : "Verified Citizen");
+      const ansCount = Number(r.answers_count ?? r.answer_count ?? (r.verified_reply ? 1 : 0));
+      return {
+        ...r,
+        title: r.title || r.body || "Legal Inquiry",
+        title_urdu: r.title_urdu || r.body_urdu || r.title || "قانونی سوال",
+        body: r.body || r.title || "",
+        body_urdu: r.body_urdu || r.title_urdu || "",
+        category: r.category || "Family & Guardianship",
+        category_urdu: r.category_urdu || "خاندانی قوانین",
+        city: r.city || "Lahore",
+        is_anonymous: Boolean(r.is_anonymous ?? true),
+        is_lawyer_only_private: Boolean(r.is_lawyer_only_private ?? false),
+        asker_display_name: authorName,
+        author_name: authorName,
+        upvotes: Number(r.upvotes ?? 1),
+        answers_count: ansCount,
+        answer_count: ansCount,
+        verified_reply: r.verified_reply || null,
+      };
+    }
+
+    case "appointments": {
+      const feeVal = Number(r.fee_pkr ?? r.fee ?? 15000);
+      const commVal = Number(r.platform_commission ?? Math.round(feeVal * 0.15));
+      const escrowVal = Number(r.escrow_amount ?? (feeVal - commVal));
+      const schedDate = r.scheduled_date || r.date || "2026-05-15";
+      const schedSlot = r.scheduled_slot || r.time_slot || "11:00 AM PKT";
+      return {
+        ...r,
+        case_reference: r.case_reference || `CASE-PK-${r.id || 101}`,
+        lawyer_name: r.lawyer_name || "Advocate High Court",
+        lawyer_name_urdu: r.lawyer_name_urdu || r.lawyer_name || "ایڈووکیٹ ہائی کورٹ",
+        client_name: r.client_name || "Verified Client",
+        court: r.court || r.case_category || "High Court Chamber",
+        case_title: r.case_title || r.case_summary || "Legal Consultation",
+        case_summary: r.case_summary || r.case_title || "Legal Consultation",
+        case_category: r.case_category || "Civil & Family Law",
+        scheduled_date: schedDate,
+        date: schedDate,
+        scheduled_slot: schedSlot,
+        time_slot: schedSlot,
+        fee_pkr: feeVal,
+        fee: feeVal,
+        escrow_amount: escrowVal,
+        platform_commission: commVal,
+        payment_method: r.payment_method || "RAAST / Safepay Escrow",
+        video_room_id: r.video_room_id || `VIDEO-CHAMBER-${r.id || 901}`,
+        status: r.status || "confirmed",
+        shared_document_urls: Array.isArray(r.shared_document_urls) ? r.shared_document_urls : [],
+      };
+    }
+
+    case "escrow_ledger": {
+      const grossVal = Number(r.amount_pkr ?? r.gross_amount_pkr ?? 15000);
+      const commVal = Number(r.platform_fee_pkr ?? Math.round(grossVal * 0.15));
+      const shareVal = Number(r.lawyer_share_pkr ?? (grossVal - commVal));
+      return {
+        ...r,
+        case_id: r.case_id || r.appointment_id || 101,
+        appointment_id: r.appointment_id || r.case_id || 101,
+        client_name: r.client_name || "Verified Client",
+        lawyer_name: r.lawyer_name || "Verified Advocate",
+        amount_pkr: grossVal,
+        gross_amount_pkr: grossVal,
+        lawyer_share_pkr: shareVal,
+        platform_fee_pkr: commVal,
+        payment_gateway: r.payment_gateway || "Safepay / RAAST",
+        escrow_status: r.escrow_status || "held_in_escrow",
+        accounting_state: r.accounting_state || r.escrow_status || "Funds Held in Escrow",
+        milestone_label: r.milestone_label || "Consultation & Case Retainer",
+      };
+    }
+
+    case "wallet_withdrawals": {
+      return {
+        ...r,
+        lawyer_name: r.lawyer_name || r.account_title || "Verified Advocate",
+        account_title: r.account_title || r.lawyer_name || "Verified Advocate",
+        iban_number: r.iban_number || r.iban || "PK36SCBL0000001123456702",
+        iban: r.iban || r.iban_number || "PK36SCBL0000001123456702",
+        bank_name: r.bank_name || "RAAST Instant Settlement",
+        amount_pkr: Number(r.amount_pkr ?? 25000),
+        status: r.status || "processing",
+      };
+    }
+
+    case "probono_requests": {
+      const incomeNum = Number(r.monthly_income_pkr ?? (String(r.monthly_income || "25000").replace(/\D/g, "") || 25000));
+      return {
+        ...r,
+        applicant_name: r.applicant_name || r.applicant || "Citizen Applicant",
+        applicant: r.applicant || r.applicant_name || "Citizen Applicant",
+        monthly_income_pkr: incomeNum,
+        monthly_income: r.monthly_income || `PKR ${incomeNum.toLocaleString()}`,
+        case_category: r.case_category || r.category || "Family & Maintenance Aid",
+        category: r.category || r.case_category || "Family & Maintenance Aid",
+        certificate_type: r.certificate_type || "NADRA / BISP Income Verification",
+        income_certificate_url: r.income_certificate_url || r.income_proof_url || "",
+        income_proof_url: r.income_proof_url || r.income_certificate_url || "",
+        status: r.status || "pending_review",
+      };
+    }
+
+    case "ai_citations": {
+      const codeStr = r.citation || r.code || "PLD 2024 SC 102";
+      const titleStr = r.title_en || r.title || "Supreme Court Appellate Judgment";
+      const summaryStr = r.ai_headnote_held_en || r.ai_headnote_facts_en || r.summary || r.full_judgment_text || "";
+      return {
+        ...r,
+        citation: codeStr,
+        code: codeStr,
+        title_en: titleStr,
+        title: titleStr,
+        title_ur: r.title_ur || titleStr,
+        court_name: r.court_name || r.court || "Supreme Court of Pakistan",
+        court: r.court || r.court_name || "Supreme Court of Pakistan",
+        ai_headnote_held_en: summaryStr,
+        summary: summaryStr,
+        judge_names: Array.isArray(r.judge_names) ? r.judge_names : ["Hon. Senior Bench"],
+      };
+    }
+
+    case "ai_chat_histories": {
+      const queryStr = r.user_prompt || r.query || r.user_query || "";
+      const respStr = r.ai_response || r.response || "";
+      return {
+        ...r,
+        user_prompt: queryStr,
+        query: queryStr,
+        ai_response: respStr,
+        response: respStr,
+        mode: r.mode || "citizen_basic",
+        cited_references_json: r.cited_references_json || r.citations_used || [],
+      };
+    }
+
+    case "users_profiles": {
+      return {
+        ...r,
+        full_name: r.full_name || "Verified Citizen",
+        role: r.role || "Client",
+        city: r.city || "Islamabad",
+        preferred_lang: r.preferred_lang || r.language_pref || "en",
+        language_pref: r.language_pref || r.preferred_lang || "en",
+        theme: r.theme || r.theme_pref || "light",
+        theme_pref: r.theme_pref || r.theme || "light",
+        legal_interests: Array.isArray(r.legal_interests)
+          ? r.legal_interests
+          : Array.isArray(r.interested_categories)
+          ? r.interested_categories
+          : ["Property & Inheritance"],
+        interested_categories: Array.isArray(r.interested_categories)
+          ? r.interested_categories
+          : Array.isArray(r.legal_interests)
+          ? r.legal_interests
+          : ["Property & Inheritance"],
+      };
+    }
+
+    default:
+      return r;
+  }
+}
+
+export function normalizeRecordsForTable(table: string, rows: any[]): any[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => normalizeRecordForTable(table, row));
+}
+
 function setLocalCacheOnly(table: string, data: any[]): void {
   const canonical = resolveTableName(table);
-  inMemoryStore[canonical] = data;
-  if (typeof window !== 'undefined') {
+  const normalized = normalizeRecordsForTable(canonical, data);
+  inMemoryStore[canonical] = normalized;
+  if (typeof window !== "undefined") {
     const key = `plp_store_${STORAGE_VERSION}_${canonical}`;
-    localStorage.setItem(key, JSON.stringify(data));
+    safeLocalStorageSet(key, JSON.stringify(normalized));
   }
 }
 
 export function getTableData(table: string): any[] {
   const canonical = resolveTableName(table);
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     const key = `plp_store_${STORAGE_VERSION}_${canonical}`;
-    const stored = localStorage.getItem(key);
+    const stored = safeLocalStorageGet(key);
     if (stored !== null) {
       try {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          inMemoryStore[canonical] = parsed;
-          return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const normalized = normalizeRecordsForTable(canonical, parsed);
+          inMemoryStore[canonical] = normalized;
+          return normalized;
         }
       } catch {
         // Fallback to initial
       }
     }
-    const initial = inMemoryStore[canonical] || INITIAL_DATA_MAP[canonical] || [];
-    localStorage.setItem(key, JSON.stringify(initial));
+    const rawInitial = inMemoryStore[canonical] || INITIAL_DATA_MAP[canonical] || [];
+    const initial = normalizeRecordsForTable(canonical, rawInitial);
+    inMemoryStore[canonical] = initial;
+    safeLocalStorageSet(key, JSON.stringify(initial));
     return [...initial];
   }
-  return inMemoryStore[canonical] || INITIAL_DATA_MAP[canonical] || [];
+  const serverInitial = inMemoryStore[canonical] || INITIAL_DATA_MAP[canonical] || [];
+  return normalizeRecordsForTable(canonical, serverInitial);
 }
 
 /**
@@ -1748,11 +2206,12 @@ export function getTableData(table: string): any[] {
  */
 export function saveTableData(table: string, data: any[], skipRemoteSync = false): void {
   const canonical = resolveTableName(table);
+  const remoteTable = resolveRemoteSupabaseTableName(table);
   const previousData = getTableData(canonical);
   setLocalCacheOnly(canonical, data);
 
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('plp_data_updated'));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("plp_data_updated"));
   }
 
   if (!skipRemoteSync && rawSupabaseClient) {
@@ -1762,34 +2221,34 @@ export function saveTableData(table: string, data: any[], skipRemoteSync = false
         const removedRows = previousData.filter((r) => r.id != null && !newIds.has(String(r.id)));
 
         for (const rem of removedRows) {
-          await rawSupabaseClient.from(table).delete().eq('id', rem.id);
+          await rawSupabaseClient.from(remoteTable).delete().eq("id", rem.id);
         }
 
         if (data.length > 0) {
-          await rawSupabaseClient.from(table).upsert(data, { onConflict: 'id' });
+          await rawSupabaseClient.from(remoteTable).upsert(data, { onConflict: "id" });
         }
       } catch {
-        // Ignore if table not yet created in remote Supabase project
+        // Ignore if table or column differs in remote Supabase project
       }
     })();
   }
 }
 
 export function getSiteSettings() {
-  const rows = getTableData('site_settings');
+  const rows = getTableData("site_settings");
   return rows[0] || INITIAL_SITE_SETTINGS[0];
 }
 
 export function saveSiteSettings(updated: Record<string, any>) {
   const current = getSiteSettings();
   const next = [{ ...current, ...updated, id: 1 }];
-  saveTableData('site_settings', next);
+  saveTableData("site_settings", next);
 }
 
 export function getCategoriesByScope(
   scope: string
 ): Array<{ id: number; scope: string; name: string; name_urdu: string }> {
-  const all = getTableData('categories');
+  const all = getTableData("categories");
   return all.filter((c) => c.scope === scope);
 }
 
@@ -1799,8 +2258,11 @@ export function resetAllPlatformData(): void {
   });
 }
 
+let isSyncingFromSupabase = false;
+let lastSyncTimestamp = 0;
+
 /**
- * Pulls latest rows from all 23 Supabase tables into local cache so any edits
+ * Pulls latest rows from the 18 production Supabase tables into local cache so any edits
  * made directly in the Supabase Dashboard (supabase.com) immediately appear in the app.
  */
 export async function syncAllTablesFromSupabase(): Promise<{
@@ -1810,39 +2272,44 @@ export async function syncAllTablesFromSupabase(): Promise<{
   if (!rawSupabaseClient) {
     return { syncedTables: [], remoteConnected: false };
   }
+  const now = Date.now();
+  if (isSyncingFromSupabase || now - lastSyncTimestamp < 2500) {
+    return { syncedTables: [], remoteConnected: true };
+  }
+  isSyncingFromSupabase = true;
+  lastSyncTimestamp = now;
+
   const syncedTables: string[] = [];
 
-  await Promise.all(
-    ALL_SUPABASE_TABLES.map(async (table) => {
-      try {
-        const { data, error } = await rawSupabaseClient.from(table).select('*');
-        if (!error && Array.isArray(data)) {
-          if (data.length > 0) {
-            setLocalCacheOnly(table, data);
-            syncedTables.push(table);
-          } else {
-            const localRows = getTableData(table);
-            if (localRows.length > 0) {
-              await rawSupabaseClient.from(table).upsert(localRows, { onConflict: 'id' });
-              syncedTables.push(table);
-            }
+  try {
+    await Promise.all(
+      PRODUCTION_18_TABLES.map(async (remoteTable) => {
+        try {
+          const { data, error } = await rawSupabaseClient
+            .from(remoteTable)
+            .select("*");
+          if (!error && Array.isArray(data) && data.length > 0) {
+            setLocalCacheOnly(remoteTable, data);
+            syncedTables.push(remoteTable);
           }
+        } catch {
+          // Table may not exist yet or RLS restricted in remote project
         }
-      } catch {
-        // Table may not exist yet in remote project
-      }
-    })
-  );
+      })
+    );
+  } finally {
+    isSyncingFromSupabase = false;
+  }
 
-  if (typeof window !== 'undefined' && syncedTables.length > 0) {
-    window.dispatchEvent(new Event('plp_data_updated'));
+  if (typeof window !== "undefined" && syncedTables.length > 0) {
+    window.dispatchEvent(new Event("plp_data_updated"));
   }
 
   return { syncedTables, remoteConnected: true };
 }
 
 /**
- * Pushes/upserts all 23 tables from the app into the connected Supabase database.
+ * Pushes/upserts the 18 production tables from the app into the connected Supabase database.
  */
 export async function pushAllTablesToSupabase(): Promise<{
   pushedTables: string[];
@@ -1851,9 +2318,9 @@ export async function pushAllTablesToSupabase(): Promise<{
   if (!rawSupabaseClient) {
     return {
       pushedTables: [],
-      failedTables: ALL_SUPABASE_TABLES.map((t) => ({
+      failedTables: PRODUCTION_18_TABLES.map((t) => ({
         table: t,
-        reason: 'NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY not set in environment',
+        reason: "NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY not set in environment",
       })),
     };
   }
@@ -1861,23 +2328,23 @@ export async function pushAllTablesToSupabase(): Promise<{
   const pushedTables: string[] = [];
   const failedTables: Array<{ table: string; reason: string }> = [];
 
-  for (const table of ALL_SUPABASE_TABLES) {
+  for (const remoteTable of PRODUCTION_18_TABLES) {
     try {
-      const rows = getTableData(table);
+      const rows = getTableData(remoteTable);
       if (rows.length > 0) {
         const { error } = await rawSupabaseClient
-          .from(table)
-          .upsert(rows, { onConflict: 'id' });
+          .from(remoteTable)
+          .upsert(rows, { onConflict: "id" });
         if (error) {
-          failedTables.push({ table, reason: error.message });
+          failedTables.push({ table: remoteTable, reason: error.message });
         } else {
-          pushedTables.push(table);
+          pushedTables.push(remoteTable);
         }
       } else {
-        pushedTables.push(table);
+        pushedTables.push(remoteTable);
       }
     } catch (err: any) {
-      failedTables.push({ table, reason: err?.message || 'Unknown error' });
+      failedTables.push({ table: remoteTable, reason: err?.message || "Unknown error" });
     }
   }
 
@@ -1894,8 +2361,13 @@ class HybridStorageBucket {
     this.bucketName = bucketName;
   }
 
-  async upload(filePath: string, fileBody?: File | Blob | string) {
-    if (rawSupabaseClient && fileBody && typeof fileBody !== 'string') {
+  async upload(filePath: string, fileBody?: File | Blob | string | Record<string, any>) {
+    if (
+      rawSupabaseClient &&
+      fileBody &&
+      typeof fileBody !== "string" &&
+      (typeof Blob !== "undefined" && fileBody instanceof Blob)
+    ) {
       try {
         const { data, error } = await rawSupabaseClient.storage
           .from(this.bucketName)
@@ -1940,6 +2412,7 @@ class HybridStorageBucket {
 
 class HybridSupabaseQueryBuilder {
   private tableName: string;
+  private remoteTableName: string;
   private filters: Array<{ column: string; value: any; fn: (row: any) => boolean }> = [];
   private sortCol: string | null = null;
   private sortAsc = true;
@@ -1950,9 +2423,10 @@ class HybridSupabaseQueryBuilder {
 
   constructor(tableName: string) {
     this.tableName = resolveTableName(tableName);
+    this.remoteTableName = resolveRemoteSupabaseTableName(tableName);
   }
 
-  select(_columns = '*', options?: { count?: string; head?: boolean }) {
+  select(_columns = "*", options?: { count?: string; head?: boolean }) {
     void _columns;
     if (options?.head || options?.count) {
       this.isCountOnly = true;
@@ -2038,35 +2512,38 @@ class HybridSupabaseQueryBuilder {
     }
 
     const data = getTableData(this.tableName);
-    const newItems = rows.map((r, i) => ({
-      id: r.id || Date.now() + i,
-      created_at: r.created_at || new Date().toISOString(),
-      ...r,
-    }));
+    const newItems = rows.map((r, i) =>
+      normalizeRecordForTable(this.tableName, {
+        id: r.id || Date.now() + i,
+        created_at: r.created_at || new Date().toISOString(),
+        ...r,
+      })
+    );
     const updated = [...newItems, ...data];
     setLocalCacheOnly(this.tableName, updated);
 
     if (rawSupabaseClient) {
       try {
         const { data: remoteInserted, error } = await rawSupabaseClient
-          .from(this.tableName)
-          .upsert(newItems, { onConflict: 'id' })
+          .from(this.remoteTableName)
+          .upsert(newItems, { onConflict: "id" })
           .select();
         if (!error && Array.isArray(remoteInserted) && remoteInserted.length > 0) {
-          const merged = [...remoteInserted, ...data];
+          const normalizedRemote = normalizeRecordsForTable(this.tableName, remoteInserted);
+          const merged = [...normalizedRemote, ...data];
           setLocalCacheOnly(this.tableName, merged);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new Event('plp_data_updated'));
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event("plp_data_updated"));
           }
-          return { data: remoteInserted, error: null };
+          return { data: normalizedRemote, error: null };
         }
       } catch {
         // Fallback to local cache
       }
     }
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('plp_data_updated'));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("plp_data_updated"));
     }
     return { data: newItems, error: null };
   }
@@ -2074,13 +2551,21 @@ class HybridSupabaseQueryBuilder {
   async upsert(rows: any[]) {
     const data = getTableData(this.tableName);
     const upsertedMap = new Map(data.map((item) => [String(item.id), item]));
-    const normalizedRows = rows.map((r, i) => ({
-      id: r.id || Date.now() + i,
-      created_at: r.created_at || new Date().toISOString(),
-      ...r,
-    }));
+    const normalizedRows = rows.map((r, i) =>
+      normalizeRecordForTable(this.tableName, {
+        id: r.id || Date.now() + i,
+        created_at: r.created_at || new Date().toISOString(),
+        ...r,
+      })
+    );
     for (const r of normalizedRows) {
-      upsertedMap.set(String(r.id), { ...(upsertedMap.get(String(r.id)) || {}), ...r });
+      upsertedMap.set(
+        String(r.id),
+        normalizeRecordForTable(this.tableName, {
+          ...(upsertedMap.get(String(r.id)) || {}),
+          ...r,
+        })
+      );
     }
     const updated = Array.from(upsertedMap.values());
     setLocalCacheOnly(this.tableName, updated);
@@ -2088,15 +2573,15 @@ class HybridSupabaseQueryBuilder {
     if (rawSupabaseClient) {
       try {
         await rawSupabaseClient
-          .from(this.tableName)
-          .upsert(normalizedRows, { onConflict: 'id' });
+          .from(this.remoteTableName)
+          .upsert(normalizedRows, { onConflict: "id" });
       } catch {
         // Fallback to local cache
       }
     }
 
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('plp_data_updated'));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("plp_data_updated"));
     }
     return { data: normalizedRows, error: null };
   }
@@ -2121,7 +2606,7 @@ class HybridSupabaseQueryBuilder {
         const updated = data.map((row) => {
           if (String(row[column]) === String(value)) {
             found = true;
-            return { ...row, ...updates };
+            return normalizeRecordForTable(this.tableName, { ...row, ...updates });
           }
           return row;
         });
@@ -2132,7 +2617,7 @@ class HybridSupabaseQueryBuilder {
         if (rawSupabaseClient) {
           try {
             await rawSupabaseClient
-              .from(this.tableName)
+              .from(this.remoteTableName)
               .update(updates)
               .eq(column, value);
           } catch {
@@ -2140,14 +2625,14 @@ class HybridSupabaseQueryBuilder {
           }
         }
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('plp_data_updated'));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("plp_data_updated"));
         }
 
         if (found) {
           return { data: updates, error: null };
         }
-        return { data: null, error: { message: 'Row not found' } };
+        return { data: null, error: { message: "Row not found" } };
       },
     };
   }
@@ -2174,7 +2659,7 @@ class HybridSupabaseQueryBuilder {
         if (rawSupabaseClient) {
           try {
             await rawSupabaseClient
-              .from(this.tableName)
+              .from(this.remoteTableName)
               .delete()
               .eq(column, value);
           } catch {
@@ -2182,8 +2667,8 @@ class HybridSupabaseQueryBuilder {
           }
         }
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('plp_data_updated'));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("plp_data_updated"));
         }
         return { data: null, error: null };
       },
@@ -2202,17 +2687,11 @@ class HybridSupabaseQueryBuilder {
       if (rawSupabaseClient) {
         try {
           const { data: remoteRows, error } = await rawSupabaseClient
-            .from(this.tableName)
-            .select('*');
-          if (!error && Array.isArray(remoteRows)) {
-            if (remoteRows.length > 0) {
-              rows = remoteRows;
-              setLocalCacheOnly(this.tableName, remoteRows);
-            } else if (rows.length > 0) {
-              await rawSupabaseClient
-                .from(this.tableName)
-                .upsert(rows, { onConflict: 'id' });
-            }
+            .from(this.remoteTableName)
+            .select("*");
+          if (!error && Array.isArray(remoteRows) && remoteRows.length > 0) {
+            rows = normalizeRecordsForTable(this.tableName, remoteRows);
+            setLocalCacheOnly(this.tableName, rows);
           }
         } catch {
           // Use cached rows if offline or table not yet created in Supabase
@@ -2239,7 +2718,7 @@ class HybridSupabaseQueryBuilder {
 
       if (this.isSingle) {
         if (rows.length === 0) {
-          return { data: null, error: { message: 'Row not found' } };
+          return { data: null, error: { message: "Row not found" } };
         }
         return { data: rows[0], error: null };
       }
@@ -2329,8 +2808,8 @@ export function createClient(
             // Fallback to hybrid OTP verification
           }
         }
-        const identifier = (email || phone || '').trim().toLowerCase();
-        const profiles = getTableData('users_profiles');
+        const identifier = (email || phone || "").trim().toLowerCase();
+        const profiles = getTableData("users_profiles");
         const matchedProfile = profiles.find(
           (p) =>
             (p.email && String(p.email).toLowerCase() === identifier) ||
@@ -2374,9 +2853,10 @@ export function createClient(
             // ignore
           }
         }
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('plp_user_session');
-          window.dispatchEvent(new Event('plp_data_updated'));
+        if (typeof window !== "undefined") {
+          safeLocalStorageRemove("plp_user_session");
+          window.dispatchEvent(new Event("plp_auth_changed"));
+          window.dispatchEvent(new Event("plp_data_updated"));
         }
         return { error: null };
       },
@@ -2395,9 +2875,9 @@ export function createClient(
             session: active
               ? {
                   user: {
-                    id: String(active.id || ''),
-                    email: active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
-                    phone: !active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                    id: String(active.id || ""),
+                    email: active.phoneOrEmail.includes("@") ? active.phoneOrEmail : undefined,
+                    phone: !active.phoneOrEmail.includes("@") ? active.phoneOrEmail : undefined,
                     user_metadata: {
                       role: active.rbacRole,
                       full_name: active.name,
@@ -2424,9 +2904,9 @@ export function createClient(
           data: {
             user: active
               ? {
-                  id: String(active.id || ''),
-                  email: active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
-                  phone: !active.phoneOrEmail.includes('@') ? active.phoneOrEmail : undefined,
+                  id: String(active.id || ""),
+                  email: active.phoneOrEmail.includes("@") ? active.phoneOrEmail : undefined,
+                  phone: !active.phoneOrEmail.includes("@") ? active.phoneOrEmail : undefined,
                   user_metadata: {
                     role: active.rbacRole,
                     full_name: active.name,
@@ -2456,20 +2936,20 @@ export function createClient(
         }
         const handleLocalAuthChange = () => {
           const active = getActiveRBACSession();
-          callback(active ? 'TOKEN_REFRESHED' : 'SIGNED_OUT', active);
+          callback(active ? "TOKEN_REFRESHED" : "SIGNED_OUT", active);
         };
-        if (typeof window !== 'undefined') {
-          window.addEventListener('plp_data_updated', handleLocalAuthChange);
-          window.addEventListener('storage', handleLocalAuthChange);
+        if (typeof window !== "undefined") {
+          window.addEventListener("plp_auth_changed", handleLocalAuthChange);
+          window.addEventListener("storage", handleLocalAuthChange);
         }
         return {
           data: {
             subscription: {
               unsubscribe: () => {
                 rawSub?.unsubscribe?.();
-                if (typeof window !== 'undefined') {
-                  window.removeEventListener('plp_data_updated', handleLocalAuthChange);
-                  window.removeEventListener('storage', handleLocalAuthChange);
+                if (typeof window !== "undefined") {
+                  window.removeEventListener("plp_auth_changed", handleLocalAuthChange);
+                  window.removeEventListener("storage", handleLocalAuthChange);
                 }
               },
             },
@@ -2486,14 +2966,14 @@ export function createClient(
           // Fallback to hybrid pgvector semantic search
         }
       }
-      if (fnName === 'match_legal_documents') {
-        const query = String(args?.query_text || '').toLowerCase();
-        const laws = getTableData('laws');
-        const citations = getTableData('ai_citations');
+      if (fnName === "match_legal_documents") {
+        const query = String(args?.query_text || "").toLowerCase();
+        const laws = getTableData("laws");
+        const citations = getTableData("ai_citations");
         const matched = [
           ...citations.map((c) => ({
             id: c.id,
-            source_type: 'citation',
+            source_type: "citation",
             code: c.code,
             title: c.title,
             summary: c.summary,
@@ -2506,7 +2986,7 @@ export function createClient(
           })),
           ...laws.map((l) => ({
             id: l.id,
-            source_type: 'statute',
+            source_type: "statute",
             code: l.year,
             title: l.title,
             summary: l.description,
@@ -2615,7 +3095,8 @@ export async function syncUserProfileAndSession(params: {
   };
 
   if (typeof window !== "undefined") {
-    localStorage.setItem("plp_user_session", JSON.stringify(session));
+    safeLocalStorageSet("plp_user_session", JSON.stringify(session));
+    window.dispatchEvent(new Event("plp_auth_changed"));
     window.dispatchEvent(new Event("plp_data_updated"));
   }
 
@@ -2628,7 +3109,7 @@ export async function syncUserProfileAndSession(params: {
  */
 export function getActiveRBACSession(): SyncedUserProfileSession | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("plp_user_session");
+  const raw = safeLocalStorageGet("plp_user_session");
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -2777,7 +3258,7 @@ export async function verifyUserProfileRole(
   };
 
   if (typeof window !== "undefined") {
-    localStorage.setItem("plp_user_session", JSON.stringify(verifiedSession));
+    safeLocalStorageSet("plp_user_session", JSON.stringify(verifiedSession));
   }
 
   return {

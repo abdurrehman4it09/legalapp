@@ -778,22 +778,22 @@ export default function EnglishHomePage() {
                   <div>
                     <div className="flex items-center justify-between font-ui text-xs text-stone-500 mb-2">
                       <span>
-                        {tpl.category} · {tpl.pages} Pages · Bilingual EN/UR
+                        {tpl.category || "Legal Instrument"} · {tpl.pages || 4} Pages · Bilingual EN/UR
                       </span>
                       <span className="font-mono-code font-bold text-[#064E3B] text-sm">
-                        PKR {tpl.price.toLocaleString()}
+                        PKR {Number(tpl.price_pkr ?? tpl.price ?? 0).toLocaleString()}
                       </span>
                     </div>
                     <h3 className="text-lg font-bold text-stone-950 mb-1">
-                      {tpl.title}
+                      {tpl.title || tpl.title_en || "Legal Agreement Template"}
                     </h3>
-                    {tpl.title_urdu && (
+                    {(tpl.title_urdu || tpl.title_ur) && (
                       <p className="font-urdu text-base text-stone-600 mb-3" dir="rtl">
-                        {tpl.title_urdu}
+                        {tpl.title_urdu || tpl.title_ur}
                       </p>
                     )}
                     <p className="text-xs text-stone-600 leading-relaxed mb-4">
-                      {tpl.summary}
+                      {tpl.summary || tpl.description_en || ""}
                     </p>
                   </div>
 
