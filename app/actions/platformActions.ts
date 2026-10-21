@@ -217,23 +217,32 @@ export async function setupLawyerProfileServerAction(payload: {
     experience: "10 Years",
     court: payload.court,
     court_urdu: payload.court,
+    hourly_fee_pkr: Number(payload.fee) || 15000,
     fee: Number(payload.fee) || 15000,
+    rating_avg: 4.9,
     rating: 4.9,
     reviews_count: 1,
+    reputation_points: 950,
     verified: true,
+    pro_bono_opt_in: true,
     pro_bono: true,
+    bar_council_id: payload.barCouncilId,
     bar_And_license: payload.barCouncilId,
+    license_doc_url: storageUri,
     license_storage_url: storageUri,
-    verification_status: "Under Review",
+    verification_status: "pending",
     created_at: new Date().toISOString(),
   };
 
   const { data, error } = await supabase
-    .from("lawyer_profiles")
+    .from("lawyers")
     .insert([lawyerRecord]);
 
   revalidatePath("/");
+  revalidatePath("/urdu");
   revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
+  revalidatePath("/admin");
   revalidatePath("/admin/lawyers");
   revalidatePath("/lawyer/dashboard");
   return { data, error, storageUri };
@@ -245,7 +254,7 @@ export async function setupLawyerProfileServerAction(payload: {
 
 /**
  * Route: /lawyers/[id]/book & /checkout/[bookingId]
- * Supabase Tables: INSERT INTO appointments_and_cases (status: pending) + INSERT INTO escrow_transactions (status: held_in_escrow)
+ * Supabase Tables: INSERT INTO appointments_and_cases (status: confirmed) + INSERT INTO escrow_transactions (escrow_status: held_in_escrow)
  */
 export async function createBookingAndEscrowServerAction(payload: {
   lawyerId: number;
@@ -265,31 +274,44 @@ export async function createBookingAndEscrowServerAction(payload: {
 
   const appointmentRow = {
     id: bookingId,
+    case_reference: `CASE-PK-${String(bookingId).slice(-6)}`,
     lawyer_id: payload.lawyerId,
     lawyer_name: payload.lawyerName,
     court: payload.court,
     client_name: payload.clientName,
+    case_title: payload.caseSummary.slice(0, 90) || "Legal Consultation & Representation",
+    case_category: "General Legal Consultation",
+    scheduled_date: payload.date,
     date: payload.date,
+    scheduled_slot: payload.timeSlot,
     time_slot: payload.timeSlot,
+    fee_pkr: payload.fee,
     fee: payload.fee,
     escrow_amount: lawyerNet,
     platform_commission: commission,
     payment_method: payload.paymentMethod,
     video_room_id: roomCode,
-    status: "Escrow Locked (Pending Hearing)",
+    status: "confirmed",
+    is_pro_bono: false,
     case_summary: payload.caseSummary,
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 
   const escrowRow = {
     id: bookingId + 1,
+    case_id: bookingId,
     appointment_id: bookingId,
+    lawyer_id: payload.lawyerId,
     client_name: payload.clientName,
     lawyer_name: payload.lawyerName,
+    idempotency_key: `IDEM-${bookingId}`,
+    amount_pkr: payload.fee,
     gross_amount_pkr: payload.fee,
     lawyer_share_pkr: lawyerNet,
     platform_fee_pkr: commission,
     payment_gateway: payload.paymentMethod,
+    escrow_status: "held_in_escrow",
     accounting_state: "Funds Held in Escrow",
     milestone_label: "Initial Consultation & Case Filing",
     created_at: new Date().toISOString(),
@@ -300,6 +322,10 @@ export async function createBookingAndEscrowServerAction(payload: {
     supabase.from("escrow_transactions").insert([escrowRow]),
   ]);
 
+  revalidatePath("/");
+  revalidatePath("/urdu");
+  revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
   revalidatePath("/client/cases");
   revalidatePath("/lawyer/dashboard");
   revalidatePath("/lawyer/leads");
@@ -319,9 +345,18 @@ export async function updateClientAppointmentServerAction(payload: {
   date?: string;
   timeSlot?: string;
 }) {
-  const patch: Record<string, any> = { status: payload.status };
-  if (payload.date) patch.date = payload.date;
-  if (payload.timeSlot) patch.time_slot = payload.timeSlot;
+  const patch: Record<string, any> = {
+    status: payload.status,
+    updated_at: new Date().toISOString(),
+  };
+  if (payload.date) {
+    patch.scheduled_date = payload.date;
+    patch.date = payload.date;
+  }
+  if (payload.timeSlot) {
+    patch.scheduled_slot = payload.timeSlot;
+    patch.time_slot = payload.timeSlot;
+  }
 
   const { data, error } = await supabase
     .from("appointments_and_cases")
@@ -337,24 +372,40 @@ export async function updateClientAppointmentServerAction(payload: {
 
 /**
  * Route: /client/ai-assistant & /lawyer/ai-researcher
- * Supabase Action: Trigger RAG API + INSERT INTO ai_chat_history
+ * Supabase Action: Trigger RAG API + INSERT INTO ai_chat_logs
  */
 export async function saveAiChatHistoryServerAction(payload: {
-  mode: "assistant" | "researcher";
+  mode: "assistant" | "researcher" | "citizen_basic" | "lawyer_pro_rag" | "document_ocr";
   userQuery: string;
   aiResponse: string;
   citedStatutes?: string;
+  uploadedDocUrl?: string;
 }) {
+  const normalizedMode =
+    payload.mode === "researcher"
+      ? "lawyer_pro_rag"
+      : payload.mode === "assistant"
+      ? "citizen_basic"
+      : payload.mode;
+
   const row = {
     id: Date.now(),
-    mode: payload.mode,
+    session_id: `SESSION-${Date.now()}`,
+    mode: normalizedMode,
+    user_prompt: payload.userQuery,
+    query: payload.userQuery,
     user_query: payload.userQuery,
     ai_response: payload.aiResponse,
+    response: payload.aiResponse,
+    cited_references_json: [
+      payload.citedStatutes || "PPC / CrPC / Constitution of Pakistan 1973",
+    ],
     cited_statutes:
       payload.citedStatutes || "PPC / CrPC / Constitution of Pakistan 1973",
+    uploaded_doc_url: payload.uploadedDocUrl || "",
     created_at: new Date().toISOString(),
   };
-  const { data, error } = await supabase.from("ai_chat_history").insert([row]);
+  const { data, error } = await supabase.from("ai_chat_logs").insert([row]);
   revalidatePath("/client/ai-assistant");
   revalidatePath("/lawyer/ai-researcher");
   revalidatePath("/admin");
@@ -368,27 +419,39 @@ export async function saveAiChatHistoryServerAction(payload: {
 export async function askForumQuestionServerAction(payload: {
   title: string;
   titleUrdu?: string;
+  body?: string;
+  bodyUrdu?: string;
   category: string;
   city: string;
   isAnonymous: boolean;
+  isLawyerOnlyPrivate?: boolean;
   authorName: string;
 }) {
+  const displayName = payload.isAnonymous
+    ? "Anonymous Citizen"
+    : payload.authorName;
   const row = {
     id: Date.now(),
-    title: payload.title,
-    title_urdu: payload.titleUrdu || payload.title,
+    asker_display_name: displayName,
+    author_name: displayName,
+    is_anonymous: payload.isAnonymous,
+    is_lawyer_only_private: Boolean(payload.isLawyerOnlyPrivate),
     category: payload.category,
     category_urdu: "قانونی استفسار",
     city: payload.city,
-    is_anonymous: payload.isAnonymous,
-    author_name: payload.isAnonymous ? "Anonymous Citizen" : payload.authorName,
+    title: payload.title,
+    title_urdu: payload.titleUrdu || payload.title,
+    body: payload.body || payload.title,
+    body_urdu: payload.bodyUrdu || payload.titleUrdu || payload.title,
     upvotes: 1,
+    answers_count: 0,
     answer_count: 0,
     verified_reply: null,
     created_at: new Date().toISOString(),
   };
   const { data, error } = await supabase.from("forum_questions").insert([row]);
   revalidatePath("/");
+  revalidatePath("/urdu");
   revalidatePath("/forum");
   revalidatePath("/lawyer/reputation-desk");
   revalidatePath("/admin");
@@ -397,12 +460,15 @@ export async function askForumQuestionServerAction(payload: {
 
 /**
  * Route: /pro-bono/apply
- * Supabase Tables: INSERT INTO pro_bono_applications + Upload income proof to Storage
+ * Supabase Tables: INSERT INTO pro_bono_applications + Upload income proof to Storage (private-legal-docs)
  */
 export async function submitProBonoApplicationServerAction(payload: {
   applicant: string;
+  applicantPhone?: string;
+  city?: string;
   monthlyIncome: string;
   category: string;
+  caseDescription?: string;
   certificateType: string;
   fileName?: string;
 }) {
@@ -410,23 +476,34 @@ export async function submitProBonoApplicationServerAction(payload: {
     payload.fileName || "Income_Certificate.pdf"
   }`;
   await supabase.storage
-    .from("income-proofs")
+    .from("private-legal-docs")
     .upload(storagePath, { name: storagePath });
 
   const row = {
     id: Date.now(),
+    applicant_name: payload.applicant,
     applicant: payload.applicant,
-    monthly_income: payload.monthlyIncome,
+    applicant_phone: payload.applicantPhone || "+92 300 0000000",
+    city: payload.city || "Islamabad",
+    case_category: payload.category,
     category: payload.category,
+    monthly_income_pkr: Number(String(payload.monthlyIncome).replace(/\D/g, "")) || 25000,
+    monthly_income: payload.monthlyIncome,
+    case_description:
+      payload.caseDescription ||
+      `${payload.category} representation requested with ${payload.certificateType}`,
     certificate_type: payload.certificateType,
-    income_proof_url: `storage://${storagePath}`,
-    status: "Assigned to High Court Pro-Bono Panel",
+    income_certificate_url: `storage://private-legal-docs/${storagePath}`,
+    income_proof_url: `storage://private-legal-docs/${storagePath}`,
+    status: "pending_review",
     created_at: new Date().toISOString(),
   };
 
   const { data, error } = await supabase
     .from("pro_bono_applications")
     .insert([row]);
+  revalidatePath("/");
+  revalidatePath("/urdu");
   revalidatePath("/pro-bono/apply");
   revalidatePath("/lawyer/dashboard");
   revalidatePath("/admin");
@@ -439,7 +516,7 @@ export async function submitProBonoApplicationServerAction(payload: {
 
 /**
  * Route: /lawyer/dashboard & /lawyer/leads
- * Supabase Action: UPDATE appointments_and_cases / crm_leads SET status = 'accepted/declined'
+ * Supabase Action: UPDATE appointments_and_cases / crm_leads SET status = 'confirmed/cancelled'
  */
 export async function updateLeadOrCaseStatusServerAction(payload: {
   id: number;
@@ -465,8 +542,11 @@ export async function updateLeadOrCaseStatusServerAction(payload: {
  */
 export async function upsertCaseMilestoneServerAction(payload: {
   id?: number;
+  caseId?: number;
   caseRef: string;
   title: string;
+  description?: string;
+  amountPkr?: number;
   status: string;
   date: string;
   sharedFile?: string;
@@ -474,9 +554,13 @@ export async function upsertCaseMilestoneServerAction(payload: {
 }) {
   const row = {
     id: payload.id || Date.now(),
+    case_id: payload.caseId || 101,
     case_ref: payload.caseRef,
     title: payload.title,
+    description: payload.description || payload.title,
+    amount_pkr: payload.amountPkr || 15000,
     status: payload.status,
+    due_date: payload.date,
     date: payload.date,
     shared_file: payload.sharedFile || "Verified_Order_Sheet.pdf",
     private_lawyer_notes: payload.privateLawyerNotes || "",
@@ -492,7 +576,7 @@ export async function upsertCaseMilestoneServerAction(payload: {
 
 /**
  * Route: /lawyer/reputation-desk
- * Supabase Tables: INSERT INTO forum_answers (verified_reply) + UPDATE lawyer_profiles SET reputation_score = reputation_score + 10
+ * Supabase Tables: INSERT INTO forum_answers + UPDATE forum_questions + UPDATE lawyers SET reputation_points = reputation_points + 10
  */
 export async function submitAdvocateForumAnswerServerAction(payload: {
   questionId: number;
@@ -510,9 +594,25 @@ export async function submitAdvocateForumAnswerServerAction(payload: {
     reply_urdu: payload.replyTextUrdu || payload.replyText,
   };
 
+  await supabase.from("forum_answers").insert([
+    {
+      id: Date.now(),
+      question_id: payload.questionId,
+      lawyer_id: payload.lawyerId || 1,
+      lawyer_name: payload.lawyerName,
+      lawyer_specialty: payload.court,
+      answer_text: payload.replyText,
+      answer_text_urdu: payload.replyTextUrdu || payload.replyText,
+      upvotes: 1,
+      is_accepted: true,
+      created_at: new Date().toISOString(),
+    },
+  ]);
+
   await supabase
     .from("forum_questions")
     .update({
+      answers_count: 1,
       answer_count: 1,
       verified_reply: verifiedReply,
     })
@@ -520,24 +620,29 @@ export async function submitAdvocateForumAnswerServerAction(payload: {
 
   if (payload.lawyerId) {
     const { data: lawyer } = await supabase
-      .from("lawyer_profiles")
+      .from("lawyers")
       .select("*")
       .eq("id", payload.lawyerId)
       .single();
     if (lawyer) {
+      const nextPoints =
+        Number(lawyer.reputation_points || lawyer.reputation_score || 950) + 10;
       await supabase
-        .from("lawyer_profiles")
+        .from("lawyers")
         .update({
-          reputation_score: Number(lawyer.reputation_score || 950) + 10,
+          reputation_points: nextPoints,
+          reputation_score: nextPoints,
         })
         .eq("id", payload.lawyerId);
     }
   }
 
   revalidatePath("/");
+  revalidatePath("/urdu");
   revalidatePath("/forum");
   revalidatePath("/lawyer/reputation-desk");
   revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
   return { verifiedReply };
 }
 
@@ -547,6 +652,7 @@ export async function submitAdvocateForumAnswerServerAction(payload: {
  */
 export async function updateLawyerAvailabilityServerAction(payload: {
   id?: number;
+  lawyerId?: number;
   lawyerName: string;
   workingDays: string;
   workingHours: string;
@@ -555,11 +661,15 @@ export async function updateLawyerAvailabilityServerAction(payload: {
 }) {
   const row = {
     id: payload.id || 1,
+    lawyer_id: payload.lawyerId || 1,
     lawyer_name: payload.lawyerName,
+    day_of_week: payload.workingDays,
     working_days: payload.workingDays,
     working_hours: payload.workingHours,
+    time_slots: payload.availableSlots,
     available_slots: payload.availableSlots,
     blocked_dates: payload.blockedDates,
+    is_available: true,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await supabase
@@ -567,6 +677,7 @@ export async function updateLawyerAvailabilityServerAction(payload: {
     .upsert([row]);
   revalidatePath("/lawyer/calendar");
   revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
   return { data, error, row };
 }
 
@@ -575,6 +686,7 @@ export async function updateLawyerAvailabilityServerAction(payload: {
  * Supabase Tables: SELECT from escrow_transactions + INSERT INTO withdrawal_requests
  */
 export async function requestWalletWithdrawalServerAction(payload: {
+  lawyerId?: number;
   lawyerName: string;
   iban: string;
   bankName?: string;
@@ -582,11 +694,14 @@ export async function requestWalletWithdrawalServerAction(payload: {
 }) {
   const row = {
     id: Date.now(),
+    lawyer_id: payload.lawyerId || 1,
     lawyer_name: payload.lawyerName,
+    account_title: payload.lawyerName,
+    iban_number: payload.iban,
     iban: payload.iban,
     bank_name: payload.bankName || "RAAST Instant Settlement",
     amount_pkr: Number(payload.amountPkr),
-    status: "Settled via RAAST",
+    status: "processing",
     created_at: new Date().toISOString(),
   };
   const { data, error } = await supabase
@@ -604,11 +719,12 @@ export async function requestWalletWithdrawalServerAction(payload: {
 
 /**
  * Route: /admin/cms (Editorial Dashboard)
- * Supabase Tables: INSERT / UPDATE / DELETE on magazine_posts
- * Data Sync Rule: Revalidate Next.js cache (revalidatePath('/')) on submit so the public homepage updates instantly.
+ * Supabase Tables: INSERT / UPDATE / DELETE on articles
+ * Data Sync Rule: Revalidate Next.js cache on submit so the public homepage updates instantly.
  */
 export async function saveMagazinePostServerAction(payload: {
   id?: number | null;
+  slug?: string;
   title: string;
   subtitle?: string;
   category: string;
@@ -621,12 +737,27 @@ export async function saveMagazinePostServerAction(payload: {
   author_urdu?: string;
   read_time_urdu?: string;
   content_urdu?: string;
+  video_reel_url?: string;
+  audio_brief_url?: string;
+  thumbnail_url?: string;
+  status?: string;
 }) {
+  const slug =
+    payload.slug ||
+    payload.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
   const row = {
+    slug,
     title: payload.title,
     subtitle: payload.subtitle || "",
     category: payload.category,
+    author_name: payload.author,
     author: payload.author,
+    read_time_minutes:
+      parseInt(String(payload.read_time || "5"), 10) || 5,
     read_time: payload.read_time || "5 min read",
     content: payload.content,
     title_urdu: payload.title_urdu || payload.title,
@@ -635,27 +766,38 @@ export async function saveMagazinePostServerAction(payload: {
     author_urdu: payload.author_urdu || payload.author,
     read_time_urdu: payload.read_time_urdu || "5 منٹ کا مطالعہ",
     content_urdu: payload.content_urdu || payload.content,
+    video_reel_url: payload.video_reel_url || "",
+    audio_brief_url: payload.audio_brief_url || "",
+    thumbnail_url: payload.thumbnail_url || "",
+    status: payload.status || "published",
     created_at: new Date().toISOString(),
   };
 
   if (payload.id) {
-    await supabase.from("magazine_posts").update(row).eq("id", payload.id);
+    await supabase.from("articles").update(row).eq("id", payload.id);
     revalidatePath(`/magazine/${payload.id}`);
     revalidatePath(`/article/${payload.id}`);
+    revalidatePath(`/urdu/article/${payload.id}`);
   } else {
     const newId = Date.now();
-    await supabase.from("magazine_posts").insert([{ id: newId, ...row }]);
+    await supabase.from("articles").insert([{ id: newId, ...row }]);
   }
 
   revalidatePath("/");
   revalidatePath("/urdu");
+  revalidatePath("/laws");
+  revalidatePath("/urdu/laws");
+  revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
+  revalidatePath("/forum");
+  revalidatePath("/templates");
   revalidatePath("/admin");
   revalidatePath("/admin/cms");
   return { success: true };
 }
 
 export async function deleteMagazinePostServerAction(id: number) {
-  await supabase.from("magazine_posts").delete().eq("id", id);
+  await supabase.from("articles").delete().eq("id", id);
   revalidatePath("/");
   revalidatePath("/urdu");
   revalidatePath("/admin");
@@ -665,10 +807,11 @@ export async function deleteMagazinePostServerAction(id: number) {
 
 /**
  * Route: /admin/laws
- * Supabase Tables: INSERT / UPDATE / DELETE on legal_acts and legal_sections
+ * Supabase Tables: INSERT / UPDATE / DELETE on laws and legal_sections
  */
 export async function saveLegalActServerAction(payload: {
   id?: number | null;
+  slug?: string;
   title: string;
   title_urdu?: string;
   category: string;
@@ -676,56 +819,89 @@ export async function saveLegalActServerAction(payload: {
   section_count: string;
   description: string;
   content: string;
+  content_urdu?: string;
   commentary?: string;
+  plain_summary_en?: string;
+  plain_summary_ur?: string;
+  is_bailable?: boolean;
+  max_punishment?: string;
+  trial_court?: string;
 }) {
+  const slug =
+    payload.slug ||
+    payload.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+
   const row = {
+    slug,
     title: payload.title,
     title_urdu: payload.title_urdu || payload.title,
     category: payload.category,
+    promulgation_year: parseInt(String(payload.year), 10) || 1973,
     year: payload.year,
+    section_number: payload.section_count,
     section_count: payload.section_count,
     description: payload.description,
+    plain_summary_en: payload.plain_summary_en || payload.description,
+    plain_summary_ur:
+      payload.plain_summary_ur || payload.title_urdu || payload.description,
     content: payload.content,
+    content_urdu: payload.content_urdu || payload.content,
     commentary: payload.commentary || "",
+    marginal_notes: payload.commentary || payload.description,
+    is_bailable: payload.is_bailable ?? true,
+    max_punishment: payload.max_punishment || "As prescribed by statute",
+    trial_court: payload.trial_court || "Session / Civil Court",
     created_at: new Date().toISOString(),
   };
 
   if (payload.id) {
-    await supabase.from("legal_acts").update(row).eq("id", payload.id);
+    await supabase.from("laws").update(row).eq("id", payload.id);
     revalidatePath(`/laws/${payload.id}`);
+    revalidatePath(`/urdu/laws/${payload.id}`);
   } else {
-    await supabase
-      .from("legal_acts")
-      .insert([{ id: Date.now(), ...row }]);
+    await supabase.from("laws").insert([{ id: Date.now(), ...row }]);
   }
 
   revalidatePath("/");
+  revalidatePath("/urdu");
   revalidatePath("/laws");
+  revalidatePath("/urdu/laws");
+  revalidatePath("/admin");
   revalidatePath("/admin/laws");
   return { success: true };
 }
 
 /**
  * Route: /chat/[caseId]
- * Supabase Tables: INSERT INTO messages
+ * Supabase Tables: INSERT INTO chat_messages
  */
 export async function sendCaseChatMessageServerAction(payload: {
   caseId: string;
   senderName: string;
-  senderRole: "client" | "advocate";
+  senderRole: "client" | "advocate" | "lawyer" | "system";
   messageText: string;
   attachmentUrl?: string;
+  attachmentType?: "none" | "document" | "image" | "voice_note";
 }) {
+  const normalizedRole =
+    payload.senderRole === "advocate" ? "lawyer" : payload.senderRole;
   const row = {
     id: Date.now(),
+    case_id: Number(String(payload.caseId).replace(/\D/g, "")) || 101,
     room_id: payload.caseId,
     sender_name: payload.senderName,
-    sender_role: payload.senderRole,
+    sender_role: normalizedRole,
     message_text: payload.messageText,
     attachment_url: payload.attachmentUrl || "",
+    attachment_type:
+      payload.attachmentType ||
+      (payload.attachmentUrl ? "document" : "none"),
     created_at: new Date().toISOString(),
   };
-  const { data, error } = await supabase.from("messages").insert([row]);
+  const { data, error } = await supabase.from("chat_messages").insert([row]);
   revalidatePath(`/chat/${payload.caseId}`);
   return { data, error, row };
 }
@@ -743,7 +919,12 @@ export async function completeVideoConsultationServerAction(payload: {
 }) {
   await supabase
     .from("appointments_and_cases")
-    .update({ status: "Completed" })
+    .update({
+      status: "completed",
+      client_rating: payload.rating,
+      client_review: payload.reviewText,
+      updated_at: new Date().toISOString(),
+    })
     .eq("video_room_id", payload.caseId);
 
   const logRow = {
@@ -764,7 +945,7 @@ export async function completeVideoConsultationServerAction(payload: {
 }
 
 /**
- * Privileged Service-Role CRUD Server Action across all 23 platform tables
+ * Privileged Service-Role CRUD Server Action across all 18 production Supabase tables
  * (Admin CMS, Case Management, Escrow, Law Library, Forum, and Users & RBAC).
  */
 export async function executeServiceRoleTableCrudAction(params: {
@@ -785,9 +966,16 @@ export async function executeServiceRoleTableCrudAction(params: {
 
   revalidatePath("/");
   revalidatePath("/urdu");
+  revalidatePath("/laws");
+  revalidatePath("/urdu/laws");
+  revalidatePath("/lawyers");
+  revalidatePath("/urdu/lawyers");
+  revalidatePath("/forum");
+  revalidatePath("/templates");
   revalidatePath("/admin");
   revalidatePath("/admin/cms");
   revalidatePath("/admin/laws");
+  revalidatePath("/admin/lawyers");
   revalidatePath("/client/cases");
   revalidatePath("/lawyer/dashboard");
   revalidatePath("/lawyer/leads");

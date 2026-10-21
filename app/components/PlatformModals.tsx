@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -32,6 +32,9 @@ import {
   Users,
   Wallet,
   MessageSquare,
+  Clock,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import {
   supabase,
@@ -49,7 +52,8 @@ import {
 } from "./SharedUI";
 
 export interface UserSession {
-  id?: number;
+  id?: number | string;
+  auth_id?: string;
   phoneOrEmail: string;
   role: "client" | "advocate" | "editorial_manager" | "admin";
   rbacRole?: RBACRole;
@@ -979,6 +983,15 @@ export function LegalAIWorkspaceModal({
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showPromptSheet, setShowPromptSheet] = useState(false);
   const [selectedCitation, setSelectedCitation] = useState<any | null>(null);
+  const [recentSearches, setRecentSearches] = useState<
+    Array<{
+      id: string;
+      query: string;
+      category?: string;
+      groundingEnabled?: boolean;
+      timestamp: string;
+    }>
+  >([]);
   const [petitionDraft, setPetitionDraft] = useState(
     `IN THE HIGH COURT OF [ISLAMABAD / LAHORE / SINDH]\nWRIT PETITION NO. ______ OF 2026\n\n[Petitioner Name] ... PETITIONER\nVERSUS\nFederation of Pakistan & Others ... RESPONDENTS\n\nWRIT PETITION UNDER ARTICLE 199 OF THE CONSTITUTION OF THE ISLAMIC REPUBLIC OF PAKISTAN, 1973\n\nRespectfully Sheweth:\n1. That the Petitioner is a law-abiding citizen of Pakistan entitled to fundamental protections guaranteed under Articles 9, 10A, 23, and 25 of the Constitution.\n2. That the impugned action of the Respondents is coram non judice and void ab initio under PLD 2024 SC 112.\n\nPRAYER:\nIt is most respectfully prayed that this Honourable Court may graciously issue a writ of mandamus directing the Respondents to proceed strictly in accordance with law.`
   );
@@ -994,6 +1007,54 @@ export function LegalAIWorkspaceModal({
     },
   ]);
 
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(
+        "plp_ai_assistant_recent_searches_v1"
+      );
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setRecentSearches(parsed);
+        }
+      }
+    } catch {
+      // ignore localStorage read errors
+    }
+  }, [isOpen]);
+
+  function saveQueryToRecentSearches(queryText: string) {
+    const clean = queryText.trim();
+    if (!clean) return;
+    setRecentSearches((prev) => {
+      const next = [
+        {
+          id: `rec-${Date.now()}`,
+          query: clean,
+          category: "all",
+          groundingEnabled: true,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+        ...prev.filter((x) => x.query.toLowerCase() !== clean.toLowerCase()),
+      ].slice(0, 10);
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(
+            "plp_ai_assistant_recent_searches_v1",
+            JSON.stringify(next)
+          );
+        } catch {
+          // ignore
+        }
+      }
+      return next;
+    });
+  }
+
   useEscapeToClose(isOpen, () => {
     if (selectedCitation) {
       setSelectedCitation(null);
@@ -1007,6 +1068,7 @@ export function LegalAIWorkspaceModal({
   async function handleAsk(customPrompt?: string) {
     const queryText = (customPrompt ?? prompt).trim();
     if (!queryText) return;
+    saveQueryToRecentSearches(queryText);
     setPrompt("");
     setShowPromptSheet(false);
     const currentHistory = messages.map((m) => ({
@@ -1182,11 +1244,7 @@ export function LegalAIWorkspaceModal({
           )}
 
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-          <div
-            className={`${
-              mode === "researcher" ? "lg:col-span-7 border-r border-stone-300" : "lg:col-span-12"
-            } flex flex-col h-full overflow-hidden bg-[#FBF9F5]`}
-          >
+          <div className="lg:col-span-7 border-r border-stone-300 flex flex-col h-full overflow-hidden bg-[#FBF9F5]">
             {showPromptSheet && (
               <div className="p-4 bg-white border-b border-stone-300 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-[#064E3B]">
@@ -1386,32 +1444,108 @@ export function LegalAIWorkspaceModal({
             </form>
           </div>
 
-          {mode === "researcher" && (
-            <div className="lg:col-span-5 flex flex-col h-full bg-white overflow-hidden">
-              <div className="px-5 py-3 border-b border-stone-200 flex items-center justify-between bg-stone-50">
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold block">
-                    Screen 40 Right Pane · Rich-Text Petition Editor
-                  </span>
-                  <h4 className="text-xs font-bold text-stone-900">
-                    High Court Writ / Bail Petition Draft
-                  </h4>
+          <div className="lg:col-span-5 flex flex-col h-full bg-white overflow-y-auto divide-y divide-stone-200">
+            {/* Recent Searches Sidebar Panel (localStorage) */}
+            <div className="p-5 space-y-3 bg-[#FBF9F5]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#064E3B]">
+                  <Clock className="w-4 h-4 text-[#B48327]" />
+                  <span>Recent Searches ({recentSearches.length})</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard?.writeText(petitionDraft)}
-                  className="min-h-[36px] px-3 py-1 text-xs border border-stone-300 bg-white hover:bg-stone-100 font-medium transition-all duration-200 active:scale-[0.98] cursor-pointer"
-                >
-                  Copy Petition
-                </button>
+                {recentSearches.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecentSearches([]);
+                      if (typeof window !== "undefined") {
+                        window.localStorage.setItem(
+                          "plp_ai_assistant_recent_searches_v1",
+                          JSON.stringify([])
+                        );
+                      }
+                    }}
+                    className="px-2 py-1 border border-stone-300 bg-white hover:bg-red-50 hover:border-red-500 text-[11px] font-semibold text-stone-600 hover:text-red-700 inline-flex items-center gap-1 transition-colors duration-200 active:scale-95 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear</span>
+                  </button>
+                )}
               </div>
-              <textarea
-                value={petitionDraft}
-                onChange={(e) => setPetitionDraft(e.target.value)}
-                className="flex-1 w-full p-5 font-legal text-xs leading-relaxed text-stone-900 focus:outline-none resize-none"
-              />
+              {recentSearches.length === 0 ? (
+                <p className="text-xs text-stone-500">
+                  Past legal queries saved in <code>localStorage</code> will appear here for quick 1-click revisit.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {recentSearches.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-2.5 bg-white border border-stone-200 hover:border-[#064E3B] flex items-center justify-between gap-2 text-xs transition-colors duration-200"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleAsk(item.query)}
+                        className="text-left font-medium text-stone-900 hover:text-[#064E3B] line-clamp-2 flex-1 cursor-pointer"
+                      >
+                        {item.query}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAsk(item.query)}
+                        className="px-2 py-1 bg-[#064E3B] text-white text-[10px] font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5 text-[#D4AF37]" />
+                        <span>Revisit</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+
+            {mode === "researcher" ? (
+              <div className="flex-1 flex flex-col min-h-[260px]">
+                <div className="px-5 py-3 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+                  <div>
+                    <span className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold block">
+                      Screen 40 Right Pane · Rich-Text Petition Editor
+                    </span>
+                    <h4 className="text-xs font-bold text-stone-900">
+                      High Court Writ / Bail Petition Draft
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(petitionDraft)}
+                    className="min-h-[36px] px-3 py-1 text-xs border border-stone-300 bg-white hover:bg-stone-100 font-medium transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                  >
+                    Copy Petition
+                  </button>
+                </div>
+                <textarea
+                  value={petitionDraft}
+                  onChange={(e) => setPetitionDraft(e.target.value)}
+                  className="flex-1 w-full p-5 font-legal text-xs leading-relaxed text-stone-900 focus:outline-none resize-none"
+                />
+              </div>
+            ) : (
+              <div className="p-5 space-y-3 text-xs">
+                <div className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">
+                  Full-Screen AI Assistant Route
+                </div>
+                <p className="text-stone-600 leading-relaxed">
+                  Open the dedicated AI Legal Assistant workspace with Google Search Grounding domain filters and full history:
+                </p>
+                <Link
+                  href="/client/ai-assistant"
+                  onClick={onClose}
+                  className="min-h-[44px] px-4 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold inline-flex items-center justify-center w-full transition-colors duration-200 active:scale-95"
+                >
+                  Open /client/ai-assistant Workspace →
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Screen 42: Citation Details Modal */}

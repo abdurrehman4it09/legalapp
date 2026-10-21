@@ -120,10 +120,20 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* 2. Authentic Urdu Font (Noto Nastaliq Urdu) with proper line spacing */
-.font-urdu {
-  font-family: 'Noto Nastaliq Urdu', 'Libre Baskerville', serif !important;
-  line-height: 2.35 !important;
+/* 2. Authentic Urdu Font (Jameel Noori Nastaleeq / Noto Nastaliq Urdu) with proper line spacing */
+.font-urdu,
+[dir="rtl"] .font-urdu,
+html[dir="rtl"] body,
+[dir="rtl"] {
+  font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', serif !important;
+  line-height: 2.4 !important;
+  word-spacing: 0.1em;
+}
+
+/* Preserve clean Sans-Serif UI controls inside RTL blocks when explicitly marked .font-ui */
+[dir="rtl"] .font-ui {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', sans-serif !important;
+  line-height: 1.75 !important;
 }
 
 /* New York Times / Medium Drop-Cap for Article First Letters */
@@ -143,12 +153,66 @@ html.theme-dark .drop-cap::first-letter {
   color: #10B981;
 }
 
+/* Screen-hidden elements that appear only in print/PDF output */
+.print-only {
+  display: none;
+}
+
 @media print {
-  .no-print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  header,
+  footer,
+  nav,
+  .no-print,
+  [data-no-print="true"],
+  [role="dialog"],
+  button.no-print {
     display: none !important;
   }
+
+  .print-only {
+    display: block !important;
+  }
+
+  html,
   body {
     background: #FFFFFF !important;
     color: #000000 !important;
+    font-size: 11.5pt;
+    line-height: 1.65;
+  }
+
+  .print-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-document {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #FFFFFF !important;
+  }
+
+  article,
+  section,
+  aside,
+  blockquote,
+  h1,
+  h2,
+  h3 {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  a {
+    color: #000000 !important;
+    text-decoration: none !important;
   }
 }
