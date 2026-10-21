@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { createClient } from "@/app/supabase";
-import { Calendar, ShieldCheck, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { useEscapeToClose } from "@/app/components/SharedUI";
+import { Calendar, ShieldCheck, ArrowLeft, CheckCircle2, X } from "lucide-react";
 
 const supabase = createClient();
 
@@ -21,6 +22,7 @@ function BookLawyerRoutePageInner() {
     "Constitutional Petition / Property Mutation Verification under Specific Relief Act 1877"
   );
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  useEscapeToClose(confirmModalOpen, () => setConfirmModalOpen(false));
 
   useEffect(() => {
     async function load() {
@@ -174,32 +176,53 @@ function BookLawyerRoutePageInner() {
 
         {/* Screen 23: Confirm Time Slot Modal */}
         {confirmModalOpen && (
-          <div className="p-6 bg-stone-900 text-white border-l-4 border-[#D4AF37] space-y-4 text-xs">
-            <div className="flex items-center gap-2 text-[#D4AF37] font-bold uppercase tracking-wider">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Screen 23 · Confirm Time Slot Modal</span>
-            </div>
-            <p className="text-stone-300">
-              Confirm booking with <strong>{lawyer?.name || "Adv. Sara Mansoor, ASC"}</strong> on{" "}
-              <strong className="text-white">{selectedDate}</strong> at{" "}
-              <strong className="text-[#D4AF37]">{selectedSlot}</strong> (Fee: PKR{" "}
-              {Number(lawyer?.fee || 15000).toLocaleString()}).
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleProceedToCheckout}
-                className="px-5 py-2.5 bg-[#D4AF37] text-stone-950 font-bold uppercase tracking-wider cursor-pointer"
-              >
-                Confirm & Route to /checkout/[bookingId] (Screen 24) →
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmModalOpen(false)}
-                className="px-4 py-2.5 border border-stone-600 text-stone-300 cursor-pointer"
-              >
-                Change Slot
-              </button>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm Time Slot Modal"
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200"
+            onClick={() => setConfirmModalOpen(false)}
+          >
+            <div
+              className="relative p-6 bg-stone-900 text-white border-l-4 border-[#D4AF37] max-w-lg w-full space-y-4 text-xs animate-in fade-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[#D4AF37] font-bold uppercase tracking-wider">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Screen 23 · Confirm Time Slot Modal</span>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close time slot confirmation modal"
+                  onClick={() => setConfirmModalOpen(false)}
+                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-300 hover:text-white hover:bg-stone-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-stone-300 leading-relaxed">
+                Confirm booking with <strong>{lawyer?.name || "Adv. Sara Mansoor, ASC"}</strong> on{" "}
+                <strong className="text-white">{selectedDate}</strong> at{" "}
+                <strong className="text-[#D4AF37]">{selectedSlot}</strong> (Fee: PKR{" "}
+                {Number(lawyer?.fee || 15000).toLocaleString()}).
+              </p>
+              <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleProceedToCheckout}
+                  className="min-h-[44px] px-5 py-2.5 bg-[#D4AF37] hover:bg-amber-400 text-stone-950 font-bold uppercase tracking-wider transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                >
+                  Confirm & Route to /checkout/[bookingId] (Screen 24) →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmModalOpen(false)}
+                  className="min-h-[44px] px-4 py-2.5 border border-stone-600 hover:bg-stone-800 text-stone-300 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                >
+                  Change Slot
+                </button>
+              </div>
             </div>
           </div>
         )}

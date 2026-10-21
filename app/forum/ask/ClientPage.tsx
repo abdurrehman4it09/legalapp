@@ -1,13 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { askForumQuestionServerAction } from "@/app/actions/platformActions";
 import { createClient } from "@/app/supabase";
 import { useAuthRBAC } from "@/app/AuthContext";
-import { ShieldAlert, ArrowLeft, Send } from "lucide-react";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+  useEscapeToClose,
+} from "@/app/components/SharedUI";
+import { ShieldAlert, ArrowLeft, Send, X } from "lucide-react";
 
 const supabase = createClient();
 
@@ -20,42 +25,62 @@ export default function ForumAskQuestionPage() {
   const [city, setCity] = useState(session?.city || "Islamabad");
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [showAnonPopup, setShowAnonPopup] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEscapeToClose(showAnonPopup, () => setShowAnonPopup(false));
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    setSubmitting(true);
+    setFeedback({ status: "loading", message: null });
 
-    const row = {
-      id: Date.now(),
-      title: title.trim(),
-      title_urdu: titleUrdu.trim() || title.trim(),
-      category,
-      category_urdu: "قانونی استفسار",
-      city,
-      is_anonymous: isAnonymous,
-      author_name: isAnonymous
-        ? "Anonymous Citizen"
-        : session?.name || "Verified Client",
-      upvotes: 1,
-      answer_count: 0,
-      verified_reply: null,
-      created_at: new Date().toISOString(),
-    };
+    startTransition(async () => {
+      try {
+        const row = {
+          id: Date.now(),
+          title: title.trim(),
+          title_urdu: titleUrdu.trim() || title.trim(),
+          category,
+          category_urdu: "قانونی استفسار",
+          city,
+          is_anonymous: isAnonymous,
+          author_name: isAnonymous
+            ? "Anonymous Citizen"
+            : session?.name || "Verified Client",
+          upvotes: 1,
+          answer_count: 0,
+          verified_reply: null,
+          created_at: new Date().toISOString(),
+        };
 
-    await supabase.from("forum_questions").insert([row]);
-    await askForumQuestionServerAction({
-      title: row.title,
-      titleUrdu: row.title_urdu,
-      category: row.category,
-      city: row.city,
-      isAnonymous: row.is_anonymous,
-      authorName: row.author_name,
+        await Promise.all([
+          supabase.from("forum_questions").insert([row]),
+          askForumQuestionServerAction({
+            title: row.title,
+            titleUrdu: row.title_urdu,
+            category: row.category,
+            city: row.city,
+            isAnonymous: row.is_anonymous,
+            authorName: row.author_name,
+          }),
+        ]);
+
+        setFeedback({
+          status: "success",
+          message: "Question published to public.forum_questions!",
+        });
+        router.push("/forum");
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to publish question.",
+        });
+      }
     });
-
-    setSubmitting(false);
-    router.push("/forum");
   }
 
   return (
@@ -198,34 +223,65 @@ export default function ForumAskQuestionPage() {
           </div>
 
           {showAnonPopup && (
-            <div className="p-4 bg-stone-900 text-white space-y-2">
-              <div className="text-[#D4AF37] font-bold uppercase tracking-wider">
-                Screen 32 Popup · Public Identity Warning
-              </div>
-              <p className="text-stone-300">
-                You have unchecked &ldquo;Keep Anonymous&rdquo;. Your profile name ({session?.name || "Client"}) will be visible alongside this question on /forum.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowAnonPopup(false)}
-                className="px-3 py-1 bg-[#D4AF37] text-stone-950 font-bold cursor-pointer"
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Public Identity Warning"
+              className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200"
+              onClick={() => setShowAnonPopup(false)}
+            >
+              <div
+                className="relative p-6 bg-stone-900 text-white max-w-md w-full space-y-3 border-l-4 border-[#D4AF37] animate-in fade-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
               >
-                Acknowledge
-              </button>
+                <div className="flex items-center justify-between">
+                  <div className="text-[#D4AF37] font-bold uppercase tracking-wider">
+                    Screen 32 Popup · Public Identity Warning
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close public identity warning modal"
+                    onClick={() => setShowAnonPopup(false)}
+                    className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-300 hover:text-white hover:bg-stone-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-stone-300 leading-relaxed">
+                  You have unchecked &ldquo;Keep Anonymous&rdquo;. Your profile name ({session?.name || "Client"}) will be visible alongside this question on /forum.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowAnonPopup(false)}
+                  className="min-h-[44px] px-4 py-2 bg-[#D4AF37] hover:bg-amber-400 text-stone-950 font-bold transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                >
+                  Acknowledge
+                </button>
+              </div>
             </div>
           )}
 
+          <MutationFeedbackBanner
+            status={feedback.status}
+            message={feedback.message}
+          />
+
           <button
             type="submit"
-            disabled={submitting}
-            className="w-full py-3.5 bg-[#064E3B] text-white font-semibold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+            disabled={isPending}
+            className="w-full min-h-[44px] py-3.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
           >
-            <Send className="w-4 h-4 text-[#D4AF37]" />
-            <span>
-              {submitting
-                ? "Publishing to Supabase forum_questions..."
-                : "Publish Question to Public Forum (/forum)"}
-            </span>
+            {isPending ? (
+              <>
+                <InlineSpinner className="w-4 h-4" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 text-[#D4AF37]" />
+                <span>Publish Question to Public Forum (/forum)</span>
+              </>
+            )}
           </button>
         </form>
       </main>

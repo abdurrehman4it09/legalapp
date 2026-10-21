@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/app/Header";
@@ -10,7 +10,12 @@ import {
   setupLawyerProfileServerAction,
 } from "@/app/actions/platformActions";
 import { useAuthRBAC } from "@/app/AuthContext";
-import { ShieldCheck, Lock, Upload, ArrowRight } from "lucide-react";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+  useEscapeToClose,
+} from "@/app/components/SharedUI";
+import { ShieldCheck, Lock, Upload, ArrowRight, X } from "lucide-react";
 
 function AuthGatewayRoutePageInner() {
   const params = useParams();
@@ -34,55 +39,104 @@ function AuthGatewayRoutePageInner() {
   const [fee, setFee] = useState(15000);
   const [licenseFile, setLicenseFile] = useState("PBC_HighCourt_License.pdf");
   const [underReviewModal, setUnderReviewModal] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
-  async function handleSendOtp(e: React.FormEvent) {
+  useEscapeToClose(underReviewModal, () => setUnderReviewModal(false));
+
+  function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
-    await signInWithOtpServerAction({ phoneOrEmail });
-    setOtpSent(true);
+    setFeedback({ status: "loading", message: null });
+    startTransition(async () => {
+      try {
+        await signInWithOtpServerAction({ phoneOrEmail });
+        setOtpSent(true);
+        setFeedback({
+          status: "success",
+          message: `4-digit OTP dispatched to ${phoneOrEmail}.`,
+        });
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to send OTP.",
+        });
+      }
+    });
   }
 
-  async function handleVerifyOtp() {
+  function handleVerifyOtp() {
     router.push("/auth/role");
   }
 
-  async function handleCompleteClientSetup(e: React.FormEvent) {
+  function handleCompleteClientSetup(e: React.FormEvent) {
     e.preventDefault();
-    await setupClientProfileServerAction({
-      emailOrPhone: phoneOrEmail,
-      fullName,
-      role: "Client",
-      city,
+    setFeedback({ status: "loading", message: null });
+    startTransition(async () => {
+      try {
+        await setupClientProfileServerAction({
+          emailOrPhone: phoneOrEmail,
+          fullName,
+          role: "Client",
+          city,
+        });
+        await loginAndVerifyRole({
+          phoneOrEmail,
+          fullName,
+          role: "Client",
+          city,
+        });
+        setFeedback({
+          status: "success",
+          message: `Client profile "${fullName}" saved in public.users_profiles.`,
+        });
+        router.push("/client/cases");
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to save client profile.",
+        });
+      }
     });
-    await loginAndVerifyRole({
-      phoneOrEmail,
-      fullName,
-      role: "Client",
-      city,
-    });
-    router.push("/client/cases");
   }
 
-  async function handleCompleteLawyerSetup(e: React.FormEvent) {
+  function handleCompleteLawyerSetup(e: React.FormEvent) {
     e.preventDefault();
-    await setupLawyerProfileServerAction({
-      name: fullName.startsWith("Adv.") ? fullName : `Adv. ${fullName}`,
-      city,
-      specialization: specialty,
-      court,
-      fee,
-      barCouncilId,
-      licenseFileName: licenseFile,
+    setFeedback({ status: "loading", message: null });
+    startTransition(async () => {
+      try {
+        await setupLawyerProfileServerAction({
+          name: fullName.startsWith("Adv.") ? fullName : `Adv. ${fullName}`,
+          city,
+          specialization: specialty,
+          court,
+          fee,
+          barCouncilId,
+          licenseFileName: licenseFile,
+        });
+        await loginAndVerifyRole({
+          phoneOrEmail,
+          fullName: fullName.startsWith("Adv.") ? fullName : `Adv. ${fullName}`,
+          role: "Verified Advocate",
+          city,
+          barCouncilId,
+          highCourt: court,
+          verificationStatus: "Verified",
+        });
+        setFeedback({
+          status: "success",
+          message: `Advocate profile (${barCouncilId}) verified in public.lawyer_profiles.`,
+        });
+        setUnderReviewModal(true);
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to save advocate profile.",
+        });
+      }
     });
-    await loginAndVerifyRole({
-      phoneOrEmail,
-      fullName: fullName.startsWith("Adv.") ? fullName : `Adv. ${fullName}`,
-      role: "Verified Advocate",
-      city,
-      barCouncilId,
-      highCourt: court,
-      verificationStatus: "Verified",
-    });
-    setUnderReviewModal(true);
   }
 
   return (
@@ -127,6 +181,12 @@ function AuthGatewayRoutePageInner() {
               Secure +92 Phone or Email OTP Authentication
             </h1>
 
+            <MutationFeedbackBanner
+              status={feedback.status}
+              message={feedback.message}
+              onDismiss={() => setFeedback({ status: "idle", message: null })}
+            />
+
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
@@ -137,14 +197,22 @@ function AuthGatewayRoutePageInner() {
                   required
                   value={phoneOrEmail}
                   onChange={(e) => setPhoneOrEmail(e.target.value)}
-                  className="w-full p-3 bg-stone-50 border border-stone-300 font-mono-code text-sm"
+                  className="w-full min-h-[44px] p-3 bg-stone-50 border border-stone-300 font-mono-code text-sm"
                 />
               </div>
               <button
                 type="submit"
-                className="w-full py-3 bg-[#064E3B] text-white font-semibold uppercase tracking-wider cursor-pointer"
+                disabled={isPending}
+                className="w-full min-h-[44px] py-3 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Send 4-Digit OTP via Supabase Auth
+                {isPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Send 4-Digit OTP via Supabase Auth"
+                )}
               </button>
             </form>
 
@@ -260,11 +328,23 @@ function AuthGatewayRoutePageInner() {
                 </select>
               </div>
             </div>
+            <MutationFeedbackBanner
+              status={feedback.status}
+              message={feedback.message}
+            />
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#064E3B] text-white font-semibold uppercase tracking-wider cursor-pointer"
+              disabled={isPending}
+              className="w-full min-h-[44px] py-3.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
             >
-              Save Client Profile & Open Client Workspace (/client/cases) →
+              {isPending ? (
+                <>
+                  <InlineSpinner className="w-4 h-4" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                "Save Client Profile & Open Client Workspace (/client/cases) →"
+              )}
             </button>
           </form>
         )}
@@ -362,36 +442,70 @@ function AuthGatewayRoutePageInner() {
                 </div>
               </div>
 
+              <MutationFeedbackBanner
+                status={feedback.status}
+                message={feedback.message}
+              />
+
               <button
                 type="submit"
-                className="w-full py-3.5 bg-[#064E3B] text-white font-semibold uppercase tracking-wider cursor-pointer"
+                disabled={isPending}
+                className="w-full min-h-[44px] py-3.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Upload License to Supabase Storage & Submit Advocate Profile
+                {isPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Upload License to Supabase Storage & Submit Advocate Profile"
+                )}
               </button>
             </form>
 
             {underReviewModal && (
-              <div className="p-6 bg-stone-900 text-white space-y-3 border-l-4 border-[#D4AF37]">
-                <div className="flex items-center gap-2 text-[#D4AF37] font-bold uppercase tracking-wider">
-                  <ShieldCheck className="w-5 h-5" />
-                  <span>Screen 20 · Profile Under Review Modal</span>
-                </div>
-                <p className="text-stone-300 leading-relaxed">
-                  Your Bar Council License ({barCouncilId}) has been uploaded to the <code>lawyer_documents</code> bucket and inserted into <code>lawyer_profiles</code>.
-                </p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Link
-                    href="/lawyer/dashboard"
-                    className="px-4 py-2 bg-[#D4AF37] text-stone-950 font-bold"
-                  >
-                    Enter Lawyer CRM (/lawyer/dashboard) →
-                  </Link>
-                  <Link
-                    href="/admin/lawyers"
-                    className="px-4 py-2 border border-stone-600 text-white font-semibold"
-                  >
-                    Approve in Admin (/admin/lawyers) →
-                  </Link>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Profile Under Review Modal"
+                className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200"
+                onClick={() => setUnderReviewModal(false)}
+              >
+                <div
+                  className="relative p-6 bg-stone-900 text-white max-w-lg w-full space-y-4 border-l-4 border-[#D4AF37] animate-in fade-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[#D4AF37] font-bold uppercase tracking-wider">
+                      <ShieldCheck className="w-5 h-5" />
+                      <span>Screen 20 · Profile Under Review Modal</span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Close profile under review modal"
+                      onClick={() => setUnderReviewModal(false)}
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-300 hover:text-white hover:bg-stone-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <p className="text-stone-300 leading-relaxed">
+                    Your Bar Council License ({barCouncilId}) has been uploaded to the <code>lawyer_documents</code> bucket and inserted into <code>lawyer_profiles</code>.
+                  </p>
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-1">
+                    <Link
+                      href="/lawyer/dashboard"
+                      className="min-h-[44px] inline-flex items-center justify-center px-4 py-2 bg-[#D4AF37] hover:bg-amber-400 text-stone-950 font-bold transition-all duration-200 active:scale-[0.98]"
+                    >
+                      Enter Lawyer CRM (/lawyer/dashboard) →
+                    </Link>
+                    <Link
+                      href="/admin/lawyers"
+                      className="min-h-[44px] inline-flex items-center justify-center px-4 py-2 border border-stone-600 hover:bg-stone-800 text-white font-semibold transition-all duration-200 active:scale-[0.98]"
+                    >
+                      Approve in Admin (/admin/lawyers) →
+                    </Link>
+                  </div>
                 </div>
               </div>
             )}

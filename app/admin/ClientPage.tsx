@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import {
   createClient,
   getTableData,
@@ -27,6 +27,10 @@ import {
   deleteMagazinePostServerAction,
 } from "@/app/actions/platformActions";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  InlineSpinner,
+  useEscapeToClose,
+} from "@/app/components/SharedUI";
 import Link from "next/link";
 import {
   Calendar,
@@ -95,6 +99,10 @@ export default function AdminDashboard() {
   );
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("2026-10-25T09:00");
+  const [isMutatingArticle, startArticleTransition] = useTransition();
+
+  useEscapeToClose(mediaModalOpen, () => setMediaModalOpen(false));
+  useEscapeToClose(scheduleModalOpen, () => setScheduleModalOpen(false));
 
   // 2. Categories & Taxonomies state (Article, Law, Template, Lawyer Cities)
   const [allCategories, setAllCategories] = useState<any[]>([]);
@@ -494,7 +502,7 @@ export default function AdminDashboard() {
   };
 
   /* ---- 1. ARTICLES HANDLERS ---- */
-  async function handleSaveArticle(customSchedule?: string) {
+  function handleSaveArticle(customSchedule?: string) {
     if (!title.trim() && !titleUrdu.trim()) {
       flashBanner("Please enter an English or Urdu headline.");
       return;
@@ -517,24 +525,26 @@ export default function AdminDashboard() {
         : new Date().toISOString(),
     };
 
-    await saveMagazinePostServerAction({
-      id: editingArtId,
-      ...payload,
-    });
+    startArticleTransition(async () => {
+      await saveMagazinePostServerAction({
+        id: editingArtId,
+        ...payload,
+      });
 
-    if (editingArtId) {
-      await supabase.from("articles").update(payload).eq("id", editingArtId);
-      flashBanner(
-        "Updated briefing in magazine_posts & revalidated public routes ('/', '/magazine/[id]')!"
-      );
-    } else {
-      await supabase.from("articles").insert([payload]);
-      flashBanner(
-        "Published new briefing to magazine_posts & revalidated '/' immediately!"
-      );
-    }
-    resetArticleForm();
-    refreshAll();
+      if (editingArtId) {
+        await supabase.from("articles").update(payload).eq("id", editingArtId);
+        flashBanner(
+          "Updated briefing in magazine_posts & revalidated public routes ('/', '/magazine/[id]')!"
+        );
+      } else {
+        await supabase.from("articles").insert([payload]);
+        flashBanner(
+          "Published new briefing to magazine_posts & revalidated '/' immediately!"
+        );
+      }
+      resetArticleForm();
+      await refreshAll();
+    });
   }
 
   function handleEditArticle(art: any) {
@@ -564,11 +574,13 @@ export default function AdminDashboard() {
     setContentUrdu("");
   }
 
-  async function deleteArticle(id: number) {
-    await deleteMagazinePostServerAction(id);
-    await supabase.from("articles").delete().eq("id", id);
-    refreshAll();
-    flashBanner("Briefing deleted & revalidated public routes.");
+  function deleteArticle(id: number) {
+    startArticleTransition(async () => {
+      await deleteMagazinePostServerAction(id);
+      await supabase.from("articles").delete().eq("id", id);
+      await refreshAll();
+      flashBanner("Briefing deleted & revalidated public routes.");
+    });
   }
 
   /* ---- 2. CATEGORIES HANDLERS ---- */
@@ -1053,12 +1065,18 @@ export default function AdminDashboard() {
 
             <button
               type="button"
+              disabled={isMutatingArticle}
               onClick={() => handleSaveArticle()}
-              className="bg-[#064E3B] text-white px-8 py-3 text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 transition cursor-pointer"
+              className="bg-[#064E3B] text-white px-8 py-3 min-h-[44px] text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
-              {editingArtId
-                ? "Save Changes to Briefing"
-                : "Publish Post Live to English & Urdu Apps"}
+              {isMutatingArticle && <InlineSpinner className="w-4 h-4 text-[#D4AF37]" />}
+              <span>
+                {isMutatingArticle
+                  ? "Processing..."
+                  : editingArtId
+                  ? "Save Changes to Briefing"
+                  : "Publish Post Live to English & Urdu Apps"}
+              </span>
             </button>
           </div>
 
@@ -3365,18 +3383,26 @@ export default function AdminDashboard() {
       {/* Screen 51: Insert Media / YouTube Link Modal */}
       {mediaModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Screen 51 Insert Media Link Modal"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setMediaModalOpen(false)}
         >
           <div
-            className="bg-white border border-stone-300 max-w-md w-full p-6 space-y-4"
+            className="bg-white border border-stone-300 max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <span className="text-xs font-bold uppercase tracking-widest text-[#064E3B]">
                 Screen 51 · Insert Media / YouTube Link
               </span>
-              <button onClick={() => setMediaModalOpen(false)}>
+              <button
+                type="button"
+                aria-label="Close Insert Media Modal"
+                onClick={() => setMediaModalOpen(false)}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -3403,7 +3429,7 @@ export default function AdminDashboard() {
                 );
                 setMediaModalOpen(false);
               }}
-              className="w-full py-2.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+              className="w-full py-2.5 min-h-[44px] bg-[#064E3B] hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 text-white text-xs font-semibold cursor-pointer"
             >
               Embed into Article Body
             </button>
@@ -3414,18 +3440,26 @@ export default function AdminDashboard() {
       {/* Screen 52: Schedule Publishing Modal */}
       {scheduleModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Screen 52 Schedule Editorial Release Modal"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setScheduleModalOpen(false)}
         >
           <div
-            className="bg-white border border-stone-300 max-w-md w-full p-6 space-y-4"
+            className="bg-white border border-stone-300 max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <span className="text-xs font-bold uppercase tracking-widest text-[#B48327]">
                 Screen 52 · Schedule Editorial Release
               </span>
-              <button onClick={() => setScheduleModalOpen(false)}>
+              <button
+                type="button"
+                aria-label="Close Schedule Publishing Modal"
+                onClick={() => setScheduleModalOpen(false)}
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -3441,7 +3475,7 @@ export default function AdminDashboard() {
                 setScheduleModalOpen(false);
                 handleSaveArticle(scheduledDate);
               }}
-              className="w-full py-2.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+              className="w-full py-2.5 min-h-[44px] bg-[#064E3B] hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 text-white text-xs font-semibold cursor-pointer"
             >
               Confirm Scheduled Publication
             </button>

@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { createClient } from "@/app/supabase";
 import { updateClientAppointmentServerAction } from "@/app/actions/platformActions";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+  useEscapeToClose,
+} from "@/app/components/SharedUI";
 import {
   Briefcase,
   Video,
@@ -14,6 +19,7 @@ import {
   ShieldCheck,
   Clock,
   RefreshCw,
+  X,
 } from "lucide-react";
 
 const supabase = createClient(
@@ -30,6 +36,10 @@ export default function ClientCasesPage() {
   const [newDate, setNewDate] = useState("2026-10-28");
   const [newSlot, setNewSlot] = useState("04:00 PM (Video Call)");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEscapeToClose(rescheduleId !== null, () => setRescheduleId(null));
 
   const loadClientCases = async () => {
     const [casesRes, msRes, escRes] = await Promise.all([
@@ -54,31 +64,37 @@ export default function ClientCasesPage() {
     }
   }, []);
 
-  const handleUpdateStatus = async (
+  const handleUpdateStatus = (
     id: number,
     status: string,
     date?: string,
     timeSlot?: string
   ) => {
-    await updateClientAppointmentServerAction({
-      id,
-      status,
-      date,
-      timeSlot,
-    });
-    await supabase
-      .from("appointments_and_cases")
-      .update({
-        status,
-        ...(date ? { date } : {}),
-        ...(timeSlot ? { time_slot: timeSlot } : {}),
-      })
-      .eq("id", id);
+    setErrorMsg(null);
+    startTransition(async () => {
+      try {
+        await updateClientAppointmentServerAction({
+          id,
+          status,
+          date,
+          timeSlot,
+        });
+        await supabase
+          .from("appointments_and_cases")
+          .update({
+            status,
+            ...(date ? { date } : {}),
+            ...(timeSlot ? { time_slot: timeSlot } : {}),
+          })
+          .eq("id", id);
 
-    setRescheduleId(null);
-    setStatusMsg(`Case #${id} updated in Supabase -> ${status}`);
-    setTimeout(() => setStatusMsg(null), 4000);
-    await loadClientCases();
+        setRescheduleId(null);
+        setStatusMsg(`Case #${id} updated in Supabase -> ${status}`);
+        await loadClientCases();
+      } catch (err: any) {
+        setErrorMsg(err?.message || "Failed to update appointment status.");
+      }
+    });
   };
 
   return (
@@ -108,30 +124,27 @@ export default function ClientCasesPage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <Link
               href="/lawyers"
-              className="px-4 py-2.5 bg-[#064E3B] text-white text-xs font-semibold hover:bg-emerald-950 transition-colors"
+              className="min-h-[44px] inline-flex items-center px-4 py-2.5 bg-[#064E3B] text-white text-xs font-semibold hover:bg-emerald-950 transition-all duration-200 active:scale-[0.98]"
             >
               + Book New Advocate Consultation
             </Link>
             <Link
               href="/client/ai-assistant"
-              className="px-4 py-2.5 border border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-white text-xs font-semibold transition-colors"
+              className="min-h-[44px] inline-flex items-center px-4 py-2.5 border border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-white text-xs font-semibold transition-all duration-200 active:scale-[0.98]"
             >
               Client AI Legal Assistant →
             </Link>
           </div>
         </div>
 
-        {statusMsg && (
-          <div className="p-4 bg-emerald-950 text-[#D4AF37] border border-[#D4AF37] text-xs font-semibold flex items-center justify-between">
-            <span>{statusMsg}</span>
-            <button
-              onClick={() => setStatusMsg(null)}
-              className="underline text-white"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+        <MutationFeedbackBanner
+          status={errorMsg ? "error" : statusMsg ? "success" : "idle"}
+          message={errorMsg || statusMsg}
+          onDismiss={() => {
+            setStatusMsg(null);
+            setErrorMsg(null);
+          }}
+        />
 
         {/* Active & Past Cases List */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -205,24 +218,34 @@ export default function ClientCasesPage() {
 
                   {/* Screen 27: Reschedule / Cancel Inline Modal */}
                   {rescheduleId === c.id && (
-                    <div className="p-4 bg-amber-50/70 border border-[#B48327] space-y-3">
-                      <div className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 text-[#B48327]" />
-                        <span>
-                          Screen 27 • Reschedule Appointment in Supabase
-                        </span>
+                    <div className="p-4 bg-amber-50/70 border border-[#B48327] space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 text-[#B48327]" />
+                          <span>
+                            Screen 27 • Reschedule Appointment in Supabase
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Close reschedule panel"
+                          onClick={() => setRescheduleId(null)}
+                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input
                           type="date"
                           value={newDate}
                           onChange={(e) => setNewDate(e.target.value)}
-                          className="px-3 py-2 border border-stone-300 bg-white text-xs"
+                          className="min-h-[44px] px-3 py-2 border border-stone-300 bg-white text-xs"
                         />
                         <select
                           value={newSlot}
                           onChange={(e) => setNewSlot(e.target.value)}
-                          className="px-3 py-2 border border-stone-300 bg-white text-xs"
+                          className="min-h-[44px] px-3 py-2 border border-stone-300 bg-white text-xs"
                         >
                           <option value="11:00 AM (Video Call)">
                             11:00 AM (Video Call)
@@ -235,9 +258,10 @@ export default function ClientCasesPage() {
                           </option>
                         </select>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
+                          disabled={isPending}
                           onClick={() =>
                             handleUpdateStatus(
                               c.id,
@@ -246,14 +270,21 @@ export default function ClientCasesPage() {
                               newSlot
                             )
                           }
-                          className="px-4 py-2 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                          className="min-h-[44px] px-4 py-2 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                         >
-                          Save New Date & Slot
+                          {isPending ? (
+                            <>
+                              <InlineSpinner className="w-3.5 h-3.5" />
+                              <span>Processing...</span>
+                            </>
+                          ) : (
+                            "Save New Date & Slot"
+                          )}
                         </button>
                         <button
                           type="button"
                           onClick={() => setRescheduleId(null)}
-                          className="px-4 py-2 border border-stone-300 bg-white text-xs font-semibold cursor-pointer"
+                          className="min-h-[44px] px-4 py-2 border border-stone-300 bg-white hover:bg-stone-50 text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer"
                         >
                           Cancel
                         </button>

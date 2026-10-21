@@ -68,11 +68,11 @@ export default function PublicLawsLibrary() {
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 font-ui">
             <div className="relative flex-1 min-w-[260px] max-w-xl">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-3.5" />
               <input
                 type="text"
                 placeholder="Search statutes by section (Art 10A, Sec 489-F, Sec 42), act title, or keyword..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-stone-300 text-xs focus:outline-none focus:border-[#064E3B]"
+                className="w-full min-h-[44px] pl-10 pr-4 py-2.5 bg-white border border-stone-300 text-xs focus:outline-none focus:border-[#064E3B] transition-all duration-200"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -84,10 +84,10 @@ export default function PublicLawsLibrary() {
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCat(cat)}
-                  className={`px-3.5 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                  className={`px-3.5 py-2 min-h-[44px] text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                     selectedCat === cat
                       ? "bg-[#064E3B] text-white"
-                      : "bg-white border border-stone-300 text-stone-700 hover:border-stone-900"
+                      : "bg-white border border-stone-300 text-stone-700 hover:bg-stone-50 hover:border-stone-900"
                   }`}
                 >
                   {cat}
@@ -112,7 +112,7 @@ export default function PublicLawsLibrary() {
                 <Link
                   key={law.id}
                   href={`/laws/${law.id}`}
-                  className="block p-6 sm:p-8 hover:bg-stone-50 transition-colors"
+                  className="block p-6 sm:p-8 hover:bg-stone-50 active:scale-[0.99] transition-all duration-200 overflow-hidden"
                 >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-2 max-w-3xl">
@@ -126,25 +126,25 @@ export default function PublicLawsLibrary() {
                         </span>
                       </div>
 
-                      <h2 className="text-xl sm:text-2xl font-bold text-stone-950">
+                      <h2 className="text-xl sm:text-2xl font-bold text-stone-950 break-words">
                         {law.title}
                       </h2>
 
                       {law.title_urdu && (
                         <h3
-                          className="text-lg font-urdu text-stone-700"
+                          className="text-lg font-urdu text-stone-700 break-words"
                           dir="rtl"
                         >
                           {law.title_urdu}
                         </h3>
                       )}
 
-                      <p className="text-xs sm:text-sm text-stone-600 leading-relaxed pt-1">
+                      <p className="text-xs sm:text-sm text-stone-600 leading-relaxed pt-1 break-words">
                         {law.description || law.content}
                       </p>
                     </div>
 
-                    <div className="font-ui text-xs font-semibold text-[#064E3B] flex items-center gap-1.5 shrink-0">
+                    <div className="font-ui text-xs font-semibold text-[#064E3B] flex items-center gap-1.5 shrink-0 min-h-[44px]">
                       <span>Open Statute Reader (Screen 12)</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </div>

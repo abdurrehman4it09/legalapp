@@ -2,6 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { createClient } from "@/app/supabase";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "@/app/components/SharedUI";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
@@ -123,16 +127,18 @@ export default function AdminLaws() {
         <button
           type="button"
           onClick={() => (showForm ? resetForm() : setShowForm(true))}
-          className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 transition cursor-pointer"
+          className="bg-[#064E3B] text-white px-6 py-2.5 min-h-[44px] text-xs font-semibold uppercase tracking-wider hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 cursor-pointer"
         >
           {showForm ? "Cancel" : "+ Add New Statute / Act"}
         </button>
       </div>
 
       {statusMessage && (
-        <div className="p-3 bg-emerald-950/5 border border-[#064E3B] text-xs font-semibold text-[#064E3B]">
-          {statusMessage}
-        </div>
+        <MutationFeedbackBanner
+          type={statusMessage.toLowerCase().includes("error") ? "error" : "success"}
+          message={statusMessage}
+          onDismiss={() => setStatusMessage("")}
+        />
       )}
 
       {showForm && (
@@ -228,13 +234,16 @@ export default function AdminLaws() {
           <button
             type="submit"
             disabled={saving}
-            className="bg-[#064E3B] text-white px-6 py-2.5 text-xs font-semibold uppercase tracking-wider cursor-pointer"
+            className="bg-[#064E3B] hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 text-white px-6 py-2.5 min-h-[44px] text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
-            {saving
-              ? "Saving..."
-              : editingId
-              ? "Update Statute"
-              : "Save Statute to Library"}
+            {saving && <InlineSpinner className="w-3.5 h-3.5 text-[#D4AF37]" />}
+            <span>
+              {saving
+                ? "Processing..."
+                : editingId
+                ? "Update Statute"
+                : "Save Statute to Library"}
+            </span>
           </button>
         </form>
       )}

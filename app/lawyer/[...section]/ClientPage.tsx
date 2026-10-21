@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect, useTransition, use } from "react";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { createClient } from "@/app/supabase";
@@ -13,6 +13,10 @@ import {
   saveAiChatHistoryServerAction,
 } from "@/app/actions/platformActions";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "@/app/components/SharedUI";
 import {
   Briefcase,
   CheckCircle2,
@@ -52,6 +56,8 @@ function LawyerCatchAllCRMPageInner({
   const [escrowList, setEscrowList] = useState<any[]>([]);
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   // Forms state
   const [msCaseRef, setMsCaseRef] = useState(`CASE-LHR-2026-0${subId}`);
@@ -129,95 +135,130 @@ function LawyerCatchAllCRMPageInner({
   }, []);
 
   const notify = (msg: string) => {
+    setErrorBanner(null);
     setStatusBanner(msg);
-    setTimeout(() => setStatusBanner(null), 4000);
   };
 
-  const handleLeadDecision = async (
+  const handleLeadDecision = (
     id: number,
     table: "crm_leads" | "appointments_and_cases",
     status: string
   ) => {
-    await updateLeadOrCaseStatusServerAction({ id, table, status });
-    await supabase.from(table).update({ status }).eq("id", id);
-    notify(`Updated ${table} #${id} -> ${status}`);
-    await loadCRMData();
+    setErrorBanner(null);
+    startTransition(async () => {
+      try {
+        await updateLeadOrCaseStatusServerAction({ id, table, status });
+        await supabase.from(table).update({ status }).eq("id", id);
+        notify(`Updated ${table} #${id} -> ${status}`);
+        await loadCRMData();
+      } catch (err: any) {
+        setErrorBanner(err?.message || "Failed to update lead status.");
+      }
+    });
   };
 
-  const handleAddMilestone = async (e: React.FormEvent) => {
+  const handleAddMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!msTitle.trim()) return;
-    const res = await upsertCaseMilestoneServerAction({
-      caseRef: msCaseRef,
-      title: msTitle,
-      status: msStatus,
-      date: msDate,
-      privateLawyerNotes: msNotes,
+    setErrorBanner(null);
+    startTransition(async () => {
+      try {
+        const res = await upsertCaseMilestoneServerAction({
+          caseRef: msCaseRef,
+          title: msTitle,
+          status: msStatus,
+          date: msDate,
+          privateLawyerNotes: msNotes,
+        });
+        await supabase.from("case_milestones").upsert([res.row]);
+        setMsTitle("");
+        setMsNotes("");
+        notify(`Milestone "${res.row.title}" saved to public.case_milestones!`);
+        await loadCRMData();
+      } catch (err: any) {
+        setErrorBanner(err?.message || "Failed to save milestone.");
+      }
     });
-    await supabase.from("case_milestones").upsert([res.row]);
-    setMsTitle("");
-    setMsNotes("");
-    notify(`Milestone "${res.row.title}" saved to public.case_milestones!`);
-    await loadCRMData();
   };
 
-  const handlePostForumAnswer = async (questionId: number) => {
+  const handlePostForumAnswer = (questionId: number) => {
     const text = replyTexts[questionId]?.trim();
     if (!text) return;
-    const lawyerName = user?.name || "Barrister Sikandar Hayat";
-    const res = await submitAdvocateForumAnswerServerAction({
-      questionId,
-      lawyerId: 1,
-      lawyerName,
-      court: "Supreme Court of Pakistan",
-      replyText: text,
+    setErrorBanner(null);
+    startTransition(async () => {
+      try {
+        const lawyerName = user?.name || "Barrister Sikandar Hayat";
+        const res = await submitAdvocateForumAnswerServerAction({
+          questionId,
+          lawyerId: 1,
+          lawyerName,
+          court: "Supreme Court of Pakistan",
+          replyText: text,
+        });
+        await supabase
+          .from("forum_questions")
+          .update({
+            answer_count: 1,
+            verified_reply: res.verifiedReply,
+          })
+          .eq("id", questionId);
+        setReplyTexts((prev) => ({ ...prev, [questionId]: "" }));
+        notify(
+          "Published verified legal opinion & awarded +10 Reputation Points in Supabase!"
+        );
+        await loadCRMData();
+      } catch (err: any) {
+        setErrorBanner(err?.message || "Failed to publish answer.");
+      }
     });
-    await supabase
-      .from("forum_questions")
-      .update({
-        answer_count: 1,
-        verified_reply: res.verifiedReply,
-      })
-      .eq("id", questionId);
-    setReplyTexts((prev) => ({ ...prev, [questionId]: "" }));
-    notify(
-      `Published verified legal opinion & awarded +10 Reputation Points in Supabase!`
-    );
-    await loadCRMData();
   };
 
-  const handleSaveAvailability = async (e: React.FormEvent) => {
+  const handleSaveAvailability = (e: React.FormEvent) => {
     e.preventDefault();
-    const lawyerName = user?.name || "Barrister Sikandar Hayat";
-    const res = await updateLawyerAvailabilityServerAction({
-      id: availability?.id || 1,
-      lawyerName,
-      workingDays: workDays,
-      workingHours: workHours,
-      availableSlots: slotsInput.split(",").map((s) => s.trim()),
-      blockedDates: blockedInput.split(",").map((s) => s.trim()),
+    setErrorBanner(null);
+    startTransition(async () => {
+      try {
+        const lawyerName = user?.name || "Barrister Sikandar Hayat";
+        const res = await updateLawyerAvailabilityServerAction({
+          id: availability?.id || 1,
+          lawyerName,
+          workingDays: workDays,
+          workingHours: workHours,
+          availableSlots: slotsInput.split(",").map((s) => s.trim()),
+          blockedDates: blockedInput.split(",").map((s) => s.trim()),
+        });
+        await supabase.from("lawyer_availability").upsert([res.row]);
+        notify("Updated public.lawyer_availability roster in Supabase!");
+        await loadCRMData();
+      } catch (err: any) {
+        setErrorBanner(err?.message || "Failed to update availability.");
+      }
     });
-    await supabase.from("lawyer_availability").upsert([res.row]);
-    notify("Updated public.lawyer_availability roster in Supabase!");
-    await loadCRMData();
   };
 
-  const handleRequestWithdrawal = async (e: React.FormEvent) => {
+  const handleRequestWithdrawal = (e: React.FormEvent) => {
     e.preventDefault();
-    const lawyerName = user?.name || "Barrister Sikandar Hayat";
-    const res = await requestWalletWithdrawalServerAction({
-      lawyerName,
-      iban,
-      bankName,
-      amountPkr: Number(withdrawAmount) || 45000,
+    setErrorBanner(null);
+    startTransition(async () => {
+      try {
+        const lawyerName = user?.name || "Barrister Sikandar Hayat";
+        const res = await requestWalletWithdrawalServerAction({
+          lawyerName,
+          iban,
+          bankName,
+          amountPkr: Number(withdrawAmount) || 45000,
+        });
+        await supabase.from("withdrawal_requests").insert([res.row]);
+        notify(
+          `Withdrawal Request of PKR ${Number(
+            withdrawAmount
+          ).toLocaleString()} logged to public.withdrawal_requests!`
+        );
+        await loadCRMData();
+      } catch (err: any) {
+        setErrorBanner(err?.message || "Failed to submit withdrawal request.");
+      }
     });
-    await supabase.from("withdrawal_requests").insert([res.row]);
-    notify(
-      `Withdrawal Request of PKR ${Number(
-        withdrawAmount
-      ).toLocaleString()} logged to public.withdrawal_requests!`
-    );
-    await loadCRMData();
   };
 
   const handleRunAIResearcher = async () => {
@@ -334,17 +375,14 @@ function LawyerCatchAllCRMPageInner({
           </div>
         )}
 
-        {statusBanner && (
-          <div className="p-4 bg-emerald-950 text-[#D4AF37] border border-[#D4AF37] text-xs font-semibold flex items-center justify-between">
-            <span>{statusBanner}</span>
-            <button
-              onClick={() => setStatusBanner(null)}
-              className="text-white underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+        <MutationFeedbackBanner
+          status={errorBanner ? "error" : statusBanner ? "success" : "idle"}
+          message={errorBanner || statusBanner}
+          onDismiss={() => {
+            setStatusBanner(null);
+            setErrorBanner(null);
+          }}
+        />
 
         {/* KPI Summary Row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -558,10 +596,20 @@ function LawyerCatchAllCRMPageInner({
               </select>
               <button
                 type="submit"
-                className="px-4 py-2 bg-[#064E3B] text-white text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                disabled={isPending}
+                className="min-h-[44px] px-4 py-2 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Save Milestone</span>
+                {isPending ? (
+                  <>
+                    <InlineSpinner className="w-3.5 h-3.5" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Save Milestone</span>
+                  </>
+                )}
               </button>
             </form>
 
@@ -718,9 +766,17 @@ function LawyerCatchAllCRMPageInner({
               <div className="sm:col-span-2">
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#064E3B] text-white text-xs font-bold cursor-pointer"
+                  disabled={isPending}
+                  className="min-h-[44px] px-5 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-bold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                 >
-                  Sync Availability Roster to Supabase
+                  {isPending ? (
+                    <>
+                      <InlineSpinner className="w-4 h-4" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    "Sync Availability Roster to Supabase"
+                  )}
                 </button>
               </div>
             </form>
@@ -749,27 +805,35 @@ function LawyerCatchAllCRMPageInner({
                 value={iban}
                 onChange={(e) => setIban(e.target.value)}
                 placeholder="PK36MEZN..."
-                className="px-3 py-2 border border-stone-300 bg-white font-mono-code"
+                className="min-h-[44px] px-3 py-2 border border-stone-300 bg-white font-mono-code"
               />
               <input
                 type="text"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
                 placeholder="Bank Name"
-                className="px-3 py-2 border border-stone-300 bg-white"
+                className="min-h-[44px] px-3 py-2 border border-stone-300 bg-white"
               />
               <input
                 type="number"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
                 placeholder="Amount (PKR)"
-                className="px-3 py-2 border border-stone-300 bg-white font-mono-code"
+                className="min-h-[44px] px-3 py-2 border border-stone-300 bg-white font-mono-code"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-[#064E3B] text-white font-bold cursor-pointer"
+                disabled={isPending}
+                className="min-h-[44px] px-4 py-2 bg-[#064E3B] hover:bg-emerald-950 text-white font-bold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Request RAAST Payout
+                {isPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Request RAAST Payout"
+                )}
               </button>
             </form>
 

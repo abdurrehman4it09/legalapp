@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -30,6 +30,10 @@ import {
 } from "@/lib/supabase";
 import { useAuthRBAC } from "./AuthContext";
 import { SEO_61_SCREENS_CATALOG } from "./seo";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "./components/SharedUI";
 
 export default function Header({
   lang = "en",
@@ -57,10 +61,14 @@ export default function Header({
   const [rbacModalOpen, setRbacModalOpen] = useState(false);
   const [seoModalOpen, setSeoModalOpen] = useState(false);
   const [seoModuleFilter, setSeoModuleFilter] = useState<number | "ALL">("ALL");
+  const [isPendingRole, startRoleTransition] = useTransition();
+  const [switchingTargetRole, setSwitchingTargetRole] = useState<string | null>(null);
+  const [rbacFeedback, setRbacFeedback] = useState<string | null>(null);
 
   const {
     session: rbacSession,
     role: verifiedRole,
+    isVerifying,
     verifyProfileRole,
     switchRoleAndVerify,
     logout: rbacLogout,
@@ -109,6 +117,15 @@ export default function Header({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSearchOpen(true);
+      }
+      if (e.key === "Escape") {
+        setSplashOpen(false);
+        setNotifOpen(false);
+        setLangSheetOpen(false);
+        setThemeSheetOpen(false);
+        setLogoutModalOpen(false);
+        setRbacModalOpen(false);
+        setSeoModalOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -474,41 +491,52 @@ export default function Header({
       {/* Screen 01: Splash Screen Modal Preview */}
       {splashOpen && (
         <div
-          className="fixed inset-0 z-50 bg-[#064E3B] text-white flex flex-col items-center justify-center p-6 text-center font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sovereign Legal Architecture Splash Screen"
+          className="fixed inset-0 z-50 bg-[#064E3B] text-white flex flex-col items-center justify-center p-6 text-center font-ui animate-in fade-in duration-200"
           onClick={() => setSplashOpen(false)}
         >
           <div
-            className="max-w-lg space-y-6"
+            className="relative max-w-lg w-full space-y-6 p-6 animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
+            <button
+              type="button"
+              onClick={() => setSplashOpen(false)}
+              aria-label="Close splash screen modal"
+              className="absolute top-0 right-0 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-emerald-200 hover:text-white hover:bg-emerald-900/60 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <div className="w-20 h-20 mx-auto border-2 border-[#D4AF37] flex items-center justify-center bg-emerald-950/60">
               <Scale className="w-10 h-10 text-[#D4AF37]" />
             </div>
             <div className="text-xs uppercase tracking-[0.25em] text-[#D4AF37] font-semibold">
               Screen 01 • Sovereign Legal Architecture
             </div>
-            <h2 className="text-4xl sm:text-5xl font-bold font-legal tracking-tight">
+            <h2 className="text-3xl sm:text-5xl font-bold font-legal tracking-tight break-words">
               {siteSettings?.masthead_title || "The Daily Legal Brief"}
             </h2>
-            <p className="text-lg font-urdu text-emerald-100">
+            <p className="text-lg font-urdu text-emerald-100 break-words">
               {siteSettings?.masthead_title_urdu || "دی ڈیلی لیگل بریف"} —{" "}
               {siteSettings?.masthead_kicker_urdu}
             </p>
-            <p className="text-xs text-emerald-200/80 max-w-md mx-auto leading-relaxed">
+            <p className="text-xs text-emerald-200/80 max-w-md mx-auto leading-relaxed break-words">
               {siteSettings?.masthead_subtitle}
             </p>
-            <div className="flex flex-wrap justify-center gap-3 pt-4">
+            <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 pt-4">
               <button
                 type="button"
                 onClick={() => setSplashOpen(false)}
-                className="px-6 py-3 bg-[#D4AF37] text-stone-950 text-xs font-bold tracking-wider uppercase cursor-pointer"
+                className="min-h-[44px] px-6 py-3 bg-[#D4AF37] hover:bg-amber-400 text-stone-950 text-xs font-bold tracking-wider uppercase transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 Enter Magazine Home (Screen 02)
               </button>
               <Link
                 href="/urdu"
                 onClick={() => setSplashOpen(false)}
-                className="px-6 py-3 border border-[#D4AF37] text-[#D4AF37] text-xs font-bold tracking-wider uppercase"
+                className="min-h-[44px] inline-flex items-center justify-center px-6 py-3 border border-[#D4AF37] text-[#D4AF37] hover:bg-emerald-900/50 text-xs font-bold tracking-wider uppercase transition-all duration-200 active:scale-[0.98]"
               >
                 اردو ایڈیشن کھولیں
               </Link>
@@ -520,11 +548,14 @@ export default function Header({
       {/* Screen 57: Notifications Hub Modal */}
       {notifOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Centralized Push Notifications Hub"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setNotifOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-lg p-6 shadow-2xl space-y-4"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-lg p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
@@ -536,38 +567,43 @@ export default function Header({
                   Escrow, Q&A & Court Cause-List Alerts
                 </h3>
               </div>
-              <button onClick={() => setNotifOpen(false)}>
-                <X className="w-4 h-4 text-stone-500" />
+              <button
+                type="button"
+                aria-label="Close notifications modal"
+                onClick={() => setNotifOpen(false)}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-2.5 max-h-80 overflow-y-auto">
               {notifications.map((n) => (
                 <div
                   key={n.id}
-                  className="p-3.5 bg-white border border-stone-200 space-y-1"
+                  className="p-3.5 bg-white border border-stone-200 space-y-1 hover:bg-stone-50 transition-all duration-200"
                 >
-                  <div className="flex items-center justify-between text-xs">
-                    <strong className="text-stone-950">
+                  <div className="flex items-center justify-between text-xs gap-2">
+                    <strong className="text-stone-950 break-words">
                       {isUr ? n.title_urdu || n.title : n.title}
                     </strong>
-                    <span className="font-mono-code text-[11px] text-[#064E3B]">
+                    <span className="font-mono-code text-[11px] text-[#064E3B] shrink-0">
                       {n.time}
                     </span>
                   </div>
-                  <p className="text-xs text-stone-600 leading-relaxed">
+                  <p className="text-xs text-stone-600 leading-relaxed break-words">
                     {isUr ? n.message_urdu || n.message : n.message}
                   </p>
                 </div>
               ))}
             </div>
-            <div className="pt-2 border-t border-stone-200 flex justify-between items-center text-xs">
+            <div className="pt-2 border-t border-stone-200 flex flex-wrap justify-between items-center gap-2 text-xs">
               <span className="text-stone-500">
                 Editable in Admin CMS → Notifications Tab
               </span>
               <Link
                 href="/admin"
                 onClick={() => setNotifOpen(false)}
-                className="font-semibold text-[#064E3B] hover:underline"
+                className="min-h-[44px] inline-flex items-center font-semibold text-[#064E3B] hover:underline transition-all duration-200 active:scale-[0.98]"
               >
                 Edit Notifications in Admin →
               </Link>
@@ -579,11 +615,14 @@ export default function Header({
       {/* Screen 59: Language Selector Bottom Sheet */}
       {langSheetOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Bilingual Language Selector"
+          className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setLangSheetOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
@@ -595,18 +634,23 @@ export default function Header({
                   Switch Platform Language & Layout Direction
                 </h3>
               </div>
-              <button onClick={() => setLangSheetOpen(false)}>
-                <X className="w-4 h-4 text-stone-500" />
+              <button
+                type="button"
+                aria-label="Close language selector modal"
+                onClick={() => setLangSheetOpen(false)}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Link
                 href="/"
                 onClick={() => setLangSheetOpen(false)}
-                className={`p-4 border text-center text-xs font-bold ${
+                className={`min-h-[44px] p-4 border text-center text-xs font-bold transition-all duration-200 active:scale-[0.98] ${
                   !isUr
                     ? "bg-[#064E3B] text-white border-[#064E3B]"
-                    : "bg-white text-stone-900 border-stone-300"
+                    : "bg-white text-stone-900 border-stone-300 hover:bg-stone-50"
                 }`}
               >
                 English Edition (LTR)
@@ -617,10 +661,10 @@ export default function Header({
               <Link
                 href="/urdu"
                 onClick={() => setLangSheetOpen(false)}
-                className={`p-4 border text-center text-sm font-urdu font-bold ${
+                className={`min-h-[44px] p-4 border text-center text-sm font-urdu font-bold transition-all duration-200 active:scale-[0.98] ${
                   isUr
                     ? "bg-[#064E3B] text-white border-[#064E3B]"
-                    : "bg-white text-stone-900 border-stone-300"
+                    : "bg-white text-stone-900 border-stone-300 hover:bg-stone-50"
                 }`}
               >
                 اردو ایڈیشن (RTL)
@@ -636,11 +680,14 @@ export default function Header({
       {/* Screen 60: Theme Selector Bottom Sheet */}
       {themeSheetOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Theme Selector"
+          className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setThemeSheetOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
@@ -652,11 +699,16 @@ export default function Header({
                   Select Editorial Reading Polarity
                 </h3>
               </div>
-              <button onClick={() => setThemeSheetOpen(false)}>
-                <X className="w-4 h-4 text-stone-500" />
+              <button
+                type="button"
+                aria-label="Close theme selector modal"
+                onClick={() => setThemeSheetOpen(false)}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {(
                 [
                   { id: "paper", label: "Archival Paper", desc: "#FBF9F5 Default" },
@@ -671,10 +723,10 @@ export default function Header({
                     applyTheme(t.id);
                     setThemeSheetOpen(false);
                   }}
-                  className={`p-3 border text-left text-xs cursor-pointer ${
+                  className={`min-h-[44px] p-3 border text-left text-xs transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                     theme === t.id
                       ? "bg-[#064E3B] text-white border-[#064E3B]"
-                      : "bg-white text-stone-900 border-stone-300"
+                      : "bg-white text-stone-900 border-stone-300 hover:bg-stone-50"
                   }`}
                 >
                   <strong className="block">{t.label}</strong>
@@ -689,14 +741,25 @@ export default function Header({
       {/* Screen 61: Logout Confirmation Modal */}
       {logoutModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Logout Confirmation"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setLogoutModalOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-sm p-6 shadow-2xl space-y-4 text-center"
+            className="relative bg-[#FBF9F5] border border-stone-300 w-full max-w-sm p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="text-[11px] uppercase tracking-widest text-red-700 font-semibold block">
+            <button
+              type="button"
+              aria-label="Close logout modal"
+              onClick={() => setLogoutModalOpen(false)}
+              className="absolute top-2 right-2 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <span className="text-[11px] uppercase tracking-widest text-red-700 font-semibold block pt-2">
               Screen 61 • Logout Confirmation Modal
             </span>
             <h3 className="text-lg font-bold font-legal text-stone-950">
@@ -705,18 +768,18 @@ export default function Header({
             <p className="text-xs text-stone-600">
               You will be returned to Guest Discovery Mode (Screens 01–12). Your Escrow bookings remain protected.
             </p>
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setLogoutModalOpen(false)}
-                className="flex-1 py-2.5 border border-stone-300 bg-white text-xs font-semibold cursor-pointer"
+                className="flex-1 min-h-[44px] py-2.5 border border-stone-300 bg-white hover:bg-stone-50 text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex-1 py-2.5 bg-red-700 text-white text-xs font-semibold cursor-pointer"
+                className="flex-1 min-h-[44px] py-2.5 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 Confirm Logout
               </button>
@@ -728,11 +791,14 @@ export default function Header({
       {/* 4-Role RBAC & Supabase users_profiles Sync Modal */}
       {rbacModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Active Role and Module Access Matrix"
+          className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setRbacModalOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-2xl p-6 shadow-2xl space-y-5"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-300 pb-3">
@@ -746,12 +812,21 @@ export default function Header({
               </div>
               <button
                 type="button"
+                aria-label="Close RBAC role switcher modal"
                 onClick={() => setRbacModalOpen(false)}
-                className="p-1 text-stone-500 hover:text-stone-900 cursor-pointer"
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
+
+            {rbacFeedback && (
+              <MutationFeedbackBanner
+                status="success"
+                message={rbacFeedback}
+                onDismiss={() => setRbacFeedback(null)}
+              />
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {RBAC_ROLES.map((r) => {
@@ -759,25 +834,27 @@ export default function Header({
                 const isCurrent =
                   session &&
                   normalizeRBACRole(session.rbacRole || session.role) === r;
+                const isThisRoleLoading =
+                  isPendingRole && switchingTargetRole === r;
                 return (
                   <div
                     key={r}
-                    className={`p-4 border flex flex-col justify-between space-y-3 ${
+                    className={`p-4 border flex flex-col justify-between space-y-3 transition-all duration-200 ${
                       isCurrent
                         ? "border-[#064E3B] bg-emerald-950/5"
-                        : "border-stone-300 bg-white"
+                        : "border-stone-300 bg-white hover:bg-stone-50"
                     }`}
                   >
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-xs text-stone-950">
                           {perm.label_en}
                         </span>
-                        <span className="font-mono-code text-[10px] px-2 py-0.5 bg-stone-900 text-white">
+                        <span className="font-mono-code text-[10px] px-2 py-0.5 bg-stone-900 text-white shrink-0">
                           Modules {perm.modules.join(", ")}
                         </span>
                       </div>
-                      <p className="text-[11px] text-stone-600 leading-relaxed">
+                      <p className="text-[11px] text-stone-600 leading-relaxed break-words">
                         {r === "Client" &&
                           "Book Escrow Consultations, Post Anonymous Q&A, Pro-Bono Legal Aid & Basic AI Legal Assistant."}
                         {r === "Verified Advocate" &&
@@ -790,20 +867,35 @@ export default function Header({
                     </div>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const synced = await switchRoleAndVerify(r);
-                        setSession(synced);
-                        setRbacModalOpen(false);
+                      disabled={isPendingRole}
+                      onClick={() => {
+                        setSwitchingTargetRole(r);
+                        setRbacFeedback(null);
+                        startRoleTransition(async () => {
+                          const synced = await switchRoleAndVerify(r);
+                          setSession(synced);
+                          setRbacFeedback(
+                            `Role synced to "${r}" in public.users_profiles.`
+                          );
+                          setSwitchingTargetRole(null);
+                        });
                       }}
-                      className={`w-full py-2 text-xs font-semibold cursor-pointer ${
+                      className={`w-full min-h-[44px] py-2 px-3 text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer ${
                         isCurrent
                           ? "bg-[#064E3B] text-white"
                           : "bg-stone-900 hover:bg-[#064E3B] text-white"
                       }`}
                     >
-                      {isCurrent
-                        ? `Active in users_profiles (${r})`
-                        : `Sync Session & Profile as ${r} →`}
+                      {isThisRoleLoading ? (
+                        <>
+                          <InlineSpinner className="w-4 h-4" />
+                          <span>Processing...</span>
+                        </>
+                      ) : isCurrent ? (
+                        `Active in users_profiles (${r})`
+                      ) : (
+                        `Sync Session & Profile as ${r} →`
+                      )}
                     </button>
                   </div>
                 );
@@ -822,16 +914,31 @@ export default function Header({
                 </span>
                 <button
                   type="button"
-                  onClick={() => verifyProfileRole()}
-                  className="px-2 py-0.5 border border-stone-300 bg-white text-[11px] font-semibold text-[#064E3B] hover:border-[#064E3B] cursor-pointer"
+                  disabled={isVerifying || isPendingRole}
+                  onClick={() => {
+                    startRoleTransition(async () => {
+                      await verifyProfileRole();
+                      setRbacFeedback(
+                        `Verified users_profiles.role = "${verifiedRole}" from Supabase.`
+                      );
+                    });
+                  }}
+                  className="min-h-[36px] px-3 py-1 border border-stone-300 bg-white hover:bg-stone-50 text-[11px] font-semibold text-[#064E3B] hover:border-[#064E3B] inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                 >
-                  Re-Verify users_profiles
+                  {isVerifying ? (
+                    <>
+                      <InlineSpinner className="w-3.5 h-3.5" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    "Re-Verify users_profiles"
+                  )}
                 </button>
               </div>
               <Link
                 href="/admin"
                 onClick={() => setRbacModalOpen(false)}
-                className="font-semibold text-[#064E3B] hover:underline"
+                className="min-h-[44px] inline-flex items-center font-semibold text-[#064E3B] hover:underline transition-all duration-200 active:scale-[0.98]"
               >
                 Open Admin Users & RBAC Manager →
               </Link>
@@ -843,11 +950,14 @@ export default function Header({
       {/* 61-Route Dynamic SEO & generateMetadata Inspector Modal */}
       {seoModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-stone-950/75 flex items-center justify-center p-4 font-ui"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pakistan Legal Search Intent SEO Registry"
+          className="fixed inset-0 z-50 bg-stone-950/75 flex items-center justify-center p-4 font-ui animate-in fade-in duration-200"
           onClick={() => setSeoModalOpen(false)}
         >
           <div
-            className="bg-[#FBF9F5] border-2 border-stone-900 max-w-6xl w-full max-h-[88vh] flex flex-col overflow-hidden"
+            className="bg-[#FBF9F5] border-2 border-stone-900 max-w-6xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-[#064E3B] text-white px-6 py-4 flex items-center justify-between border-b border-stone-800">
@@ -861,8 +971,9 @@ export default function Header({
               </div>
               <button
                 type="button"
+                aria-label="Close SEO metadata inspector modal"
                 onClick={() => setSeoModalOpen(false)}
-                className="p-1.5 text-stone-200 hover:text-white cursor-pointer"
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-200 hover:text-white hover:bg-emerald-900/60 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>

@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { createBookingAndEscrowServerAction } from "@/app/actions/platformActions";
 import { createClient } from "@/app/supabase";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "@/app/components/SharedUI";
 import { Lock, CheckCircle2, Video, MessageSquare, Briefcase } from "lucide-react";
 
 const supabase = createClient();
@@ -31,6 +35,11 @@ function EscrowCheckoutRoutePageInner() {
   );
   const [paidSuccess, setPaidSuccess] = useState(false);
   const [roomCode, setRoomCode] = useState(`CHAMBER-${bookingId.slice(-4)}`);
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -49,28 +58,42 @@ function EscrowCheckoutRoutePageInner() {
   const commission = Math.round(grossFee * 0.15);
   const lawyerNet = grossFee - commission;
 
-  async function handleCompleteEscrowPayment() {
-    const generatedRoom = `VIDEO-CHAMBER-${String(bookingId).slice(-4)}`;
-    setRoomCode(generatedRoom);
+  function handleCompleteEscrowPayment() {
+    setFeedback({ status: "loading", message: null });
+    startTransition(async () => {
+      try {
+        const generatedRoom = `VIDEO-CHAMBER-${String(bookingId).slice(-4)}`;
+        setRoomCode(generatedRoom);
 
-    const res = await createBookingAndEscrowServerAction({
-      lawyerId: booking.lawyerId || 1,
-      lawyerName: booking.lawyerName,
-      court: booking.court,
-      clientName: session?.name || "Tariq Mahmood",
-      date: booking.date,
-      timeSlot: booking.timeSlot,
-      fee: grossFee,
-      paymentMethod,
-      caseSummary: booking.caseSummary,
+        const res = await createBookingAndEscrowServerAction({
+          lawyerId: booking.lawyerId || 1,
+          lawyerName: booking.lawyerName,
+          court: booking.court,
+          clientName: session?.name || "Tariq Mahmood",
+          date: booking.date,
+          timeSlot: booking.timeSlot,
+          fee: grossFee,
+          paymentMethod,
+          caseSummary: booking.caseSummary,
+        });
+
+        await Promise.all([
+          supabase.from("appointments_and_cases").insert([res.appointmentRow]),
+          supabase.from("escrow_transactions").insert([res.escrowRow]),
+        ]);
+
+        setFeedback({
+          status: "success",
+          message: `PKR ${grossFee.toLocaleString()} locked in escrow_transactions (held_in_escrow).`,
+        });
+        setPaidSuccess(true);
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to process escrow checkout.",
+        });
+      }
     });
-
-    await Promise.all([
-      supabase.from("appointments_and_cases").insert([res.appointmentRow]),
-      supabase.from("escrow_transactions").insert([res.escrowRow]),
-    ]);
-
-    setPaidSuccess(true);
   }
 
   return (
@@ -146,13 +169,26 @@ function EscrowCheckoutRoutePageInner() {
             </div>
           </div>
 
+          <MutationFeedbackBanner
+            status={feedback.status}
+            message={feedback.message}
+          />
+
           {!paidSuccess ? (
             <button
               type="button"
+              disabled={isPending}
               onClick={handleCompleteEscrowPayment}
-              className="w-full py-3.5 bg-[#064E3B] text-white font-semibold uppercase tracking-wider cursor-pointer"
+              className="w-full min-h-[44px] py-3.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
             >
-              Authorize PKR {grossFee.toLocaleString()} in Escrow & Generate Chamber Room
+              {isPending ? (
+                <>
+                  <InlineSpinner className="w-4 h-4" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                `Authorize PKR ${grossFee.toLocaleString()} in Escrow & Generate Chamber Room`
+              )}
             </button>
           ) : (
             <div className="p-6 bg-stone-900 text-white border-l-4 border-[#D4AF37] space-y-4">

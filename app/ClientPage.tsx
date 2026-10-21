@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import Header from "./Header";
 import {
@@ -12,6 +12,15 @@ import {
   getActiveRBACSession,
 } from "@/app/supabase";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  askForumQuestionServerAction,
+  submitProBonoApplicationServerAction,
+  requestWalletWithdrawalServerAction,
+} from "@/app/actions/platformActions";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "./components/SharedUI";
 import {
   Scale,
   BookOpen,
@@ -84,7 +93,11 @@ export default function EnglishHomePage() {
   const [questionCity, setQuestionCity] = useState("Lahore");
   const [keepAnonymous, setKeepAnonymous] = useState(true);
   const [showAnonWarning, setShowAnonWarning] = useState(false);
-  const [questionSuccess, setQuestionSuccess] = useState("");
+  const [isQuestionPending, startQuestionTransition] = useTransition();
+  const [questionFeedback, setQuestionFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
   // Screen 33 & 34: Pro-Bono state
   const [probonoName, setProbonoName] = useState("");
@@ -93,11 +106,21 @@ export default function EnglishHomePage() {
   const [probonoCertType, setProbonoCertType] = useState("Union Council Income Certificate");
   const [showIncomeGuidelines, setShowIncomeGuidelines] = useState(false);
   const [probonoSubmitted, setProbonoSubmitted] = useState(false);
+  const [isProbonoPending, startProbonoTransition] = useTransition();
+  const [probonoFeedback, setProbonoFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
   // Screen 47: Advocate IBAN Withdraw Modal
   const [ibanModalOpen, setIbanModalOpen] = useState(false);
   const [ibanInput, setIbanInput] = useState("PK36 SCBL 0000 0011 2345 6702");
   const [withdrawDone, setWithdrawDone] = useState(false);
+  const [isWithdrawPending, startWithdrawTransition] = useTransition();
+  const [withdrawFeedback, setWithdrawFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
   async function loadAllData() {
     const [
@@ -165,7 +188,7 @@ export default function EnglishHomePage() {
   const leadArticle = filteredArticles[0] || articles[0];
   const secondaryArticles = filteredArticles.slice(1);
 
-  const handlePostQuestion = async (e: React.FormEvent) => {
+  const handlePostQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userSession) {
       setAuthTriggerReason(
@@ -175,34 +198,57 @@ export default function EnglishHomePage() {
       return;
     }
     if (!questionTitle.trim()) return;
-    const newQ = {
-      id: Date.now(),
-      title: questionTitle,
-      title_urdu: questionTitle,
-      category: questionCategory,
-      category_urdu: questionCategory,
-      city: questionCity,
-      is_anonymous: keepAnonymous,
-      author_name: keepAnonymous ? "Anonymous Citizen" : userSession.name,
-      created_at: new Date().toISOString(),
-      answer_count: 1,
-      verified_reply: {
-        lawyer_name: "Adv. Sara Mansoor, ASC",
-        lawyer_name_urdu: "ایڈووکیٹ سارہ منصور",
-        court: "Supreme Court of Pakistan",
-        reply:
-          "Preliminary Statutory Note: Your question has been logged for High Court counsel review. Preserve all primary documentary records and registered notices under Article 10A due process.",
-        reply_urdu:
-          "آپ کا سوال ریکارڈ کر لیا گیا ہے۔ تمام اصل کاغذات محفوظ رکھیں۔",
-      },
-    };
-    await supabase.from("questions").insert([newQ]);
-    await loadAllData();
-    setQuestionTitle("");
-    setQuestionSuccess("Your legal question has been published to the Q&A Forum.");
+    setQuestionFeedback({ status: "loading", message: null });
+    startQuestionTransition(async () => {
+      try {
+        const authorName = keepAnonymous ? "Anonymous Citizen" : userSession.name;
+        const newQ = {
+          id: Date.now(),
+          title: questionTitle,
+          title_urdu: questionTitle,
+          category: questionCategory,
+          category_urdu: questionCategory,
+          city: questionCity,
+          is_anonymous: keepAnonymous,
+          author_name: authorName,
+          created_at: new Date().toISOString(),
+          answer_count: 1,
+          verified_reply: {
+            lawyer_name: "Adv. Sara Mansoor, ASC",
+            lawyer_name_urdu: "ایڈووکیٹ سارہ منصور",
+            court: "Supreme Court of Pakistan",
+            reply:
+              "Preliminary Statutory Note: Your question has been logged for High Court counsel review. Preserve all primary documentary records and registered notices under Article 10A due process.",
+            reply_urdu:
+              "آپ کا سوال ریکارڈ کر لیا گیا ہے۔ تمام اصل کاغذات محفوظ رکھیں۔",
+          },
+        };
+        await Promise.all([
+          supabase.from("questions").insert([newQ]),
+          askForumQuestionServerAction({
+            title: questionTitle,
+            category: questionCategory,
+            city: questionCity,
+            isAnonymous: keepAnonymous,
+            authorName,
+          }),
+        ]);
+        await loadAllData();
+        setQuestionTitle("");
+        setQuestionFeedback({
+          status: "success",
+          message: "Your legal question has been published to the Q&A Forum.",
+        });
+      } catch (err: any) {
+        setQuestionFeedback({
+          status: "error",
+          message: err?.message || "Failed to publish legal question.",
+        });
+      }
+    });
   };
 
-  const handleProBonoSubmit = async (e: React.FormEvent) => {
+  const handleProBonoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userSession) {
       setAuthTriggerReason(
@@ -211,18 +257,41 @@ export default function EnglishHomePage() {
       setAuthModalOpen(true);
       return;
     }
-    await supabase.from("probono_requests").insert([
-      {
-        id: Date.now(),
-        applicant: probonoName || userSession.name,
-        monthly_income: probonoIncome,
-        category: probonoCategory,
-        certificate_type: probonoCertType,
-        status: "Assigned to High Court Pro-Bono Panel",
-        created_at: new Date().toISOString(),
-      },
-    ]);
-    setProbonoSubmitted(true);
+    setProbonoFeedback({ status: "loading", message: null });
+    startProbonoTransition(async () => {
+      try {
+        const applicantName = probonoName || userSession.name;
+        await Promise.all([
+          supabase.from("probono_requests").insert([
+            {
+              id: Date.now(),
+              applicant: applicantName,
+              monthly_income: probonoIncome,
+              category: probonoCategory,
+              certificate_type: probonoCertType,
+              status: "Assigned to High Court Pro-Bono Panel",
+              created_at: new Date().toISOString(),
+            },
+          ]),
+          submitProBonoApplicationServerAction({
+            applicant: applicantName,
+            monthlyIncome: probonoIncome,
+            category: probonoCategory,
+            certificateType: probonoCertType,
+          }),
+        ]);
+        setProbonoFeedback({
+          status: "success",
+          message: "Pro-Bono legal aid application logged and assigned to High Court panel.",
+        });
+        setProbonoSubmitted(true);
+      } catch (err: any) {
+        setProbonoFeedback({
+          status: "error",
+          message: err?.message || "Failed to submit Pro-Bono application.",
+        });
+      }
+    });
   };
 
   return (
@@ -863,15 +932,25 @@ export default function EnglishHomePage() {
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold cursor-pointer"
+                    disabled={isQuestionPending}
+                    className="w-full min-h-[44px] py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                   >
-                    Publish Question to Q&A Feed
+                    {isQuestionPending ? (
+                      <>
+                        <InlineSpinner className="w-4 h-4" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      "Publish Question to Q&A Feed"
+                    )}
                   </button>
-                  {questionSuccess && (
-                    <p className="text-xs text-[#064E3B] font-semibold">
-                      {questionSuccess}
-                    </p>
-                  )}
+                  <MutationFeedbackBanner
+                    status={questionFeedback.status}
+                    message={questionFeedback.message}
+                    onDismiss={() =>
+                      setQuestionFeedback({ status: "idle", message: null })
+                    }
+                  />
                 </form>
               </div>
             </div>
@@ -964,23 +1043,35 @@ export default function EnglishHomePage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                       <button
                         type="button"
                         onClick={() =>
                           setShowIncomeGuidelines(!showIncomeGuidelines)
                         }
-                        className="text-xs font-semibold text-[#064E3B] underline cursor-pointer"
+                        className="min-h-[44px] text-xs font-semibold text-[#064E3B] underline transition-all duration-200 active:scale-[0.98] cursor-pointer text-left"
                       >
                         View Screen 34 Income Certificate Guidelines
                       </button>
                       <button
                         type="submit"
-                        className="px-5 py-2.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                        disabled={isProbonoPending}
+                        className="min-h-[44px] px-5 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                       >
-                        Submit Pro-Bono Application
+                        {isProbonoPending ? (
+                          <>
+                            <InlineSpinner className="w-4 h-4" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          "Submit Pro-Bono Application"
+                        )}
                       </button>
                     </div>
+                    <MutationFeedbackBanner
+                      status={probonoFeedback.status}
+                      message={probonoFeedback.message}
+                    />
                   </form>
                 )}
               </div>
@@ -1207,40 +1298,74 @@ export default function EnglishHomePage() {
                         type="text"
                         value={ibanInput}
                         onChange={(e) => setIbanInput(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-stone-300 text-xs font-mono-code"
+                        className="w-full min-h-[44px] px-3 py-2 bg-white border border-stone-300 text-xs font-mono-code"
                       />
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (!checkModuleAccess("lawyer_crm").allowed) {
-                            const synced = await switchRoleAndVerify(
-                              "Verified Advocate"
-                            );
-                            setUserSession(synced);
-                          }
-                          await supabase.from("wallet_withdrawals").insert([
-                            {
-                              id: Date.now(),
-                              lawyer_name:
-                                userSession?.name || "Adv. Sara Mansoor, ASC",
-                              iban: ibanInput,
-                              bank_name: "SBP RAAST Instant Settlement",
-                              amount_pkr: 145000,
-                              status: "Settled via SBP RAAST",
-                              created_at: new Date().toISOString(),
-                            },
-                          ]);
-                          setWithdrawDone(true);
+                        disabled={isWithdrawPending}
+                        onClick={() => {
+                          setWithdrawFeedback({ status: "loading", message: null });
+                          startWithdrawTransition(async () => {
+                            try {
+                              let activeLawyerName =
+                                userSession?.name || "Adv. Sara Mansoor, ASC";
+                              if (!checkModuleAccess("lawyer_crm").allowed) {
+                                const synced = await switchRoleAndVerify(
+                                  "Verified Advocate"
+                                );
+                                setUserSession(synced);
+                                activeLawyerName = synced.name;
+                              }
+                              await Promise.all([
+                                supabase.from("wallet_withdrawals").insert([
+                                  {
+                                    id: Date.now(),
+                                    lawyer_name: activeLawyerName,
+                                    iban: ibanInput,
+                                    bank_name: "SBP RAAST Instant Settlement",
+                                    amount_pkr: 145000,
+                                    status: "Settled via SBP RAAST",
+                                    created_at: new Date().toISOString(),
+                                  },
+                                ]),
+                                requestWalletWithdrawalServerAction({
+                                  lawyerName: activeLawyerName,
+                                  iban: ibanInput,
+                                  bankName: "SBP RAAST Instant Settlement",
+                                  amountPkr: 145000,
+                                }),
+                              ]);
+                              setWithdrawDone(true);
+                              setWithdrawFeedback({
+                                status: "success",
+                                message: `RAAST Settlement Logged to public.wallet_withdrawals (${ibanInput}).`,
+                              });
+                            } catch (err: any) {
+                              setWithdrawFeedback({
+                                status: "error",
+                                message: err?.message || "RAAST settlement failed.",
+                              });
+                            }
+                          });
                         }}
-                        className="w-full py-2 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                        className="w-full min-h-[44px] py-2 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
                       >
-                        Transfer PKR 145,000 via SBP RAAST
+                        {isWithdrawPending ? (
+                          <>
+                            <InlineSpinner className="w-4 h-4" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          "Transfer PKR 145,000 via SBP RAAST"
+                        )}
                       </button>
-                      {withdrawDone && (
-                        <p className="text-xs text-[#064E3B] font-semibold">
-                          RAAST Settlement Logged to public.wallet_withdrawals ({ibanInput}).
-                        </p>
-                      )}
+                      <MutationFeedbackBanner
+                        status={withdrawFeedback.status}
+                        message={withdrawFeedback.message}
+                        onDismiss={() =>
+                          setWithdrawFeedback({ status: "idle", message: null })
+                        }
+                      />
                     </div>
                   )}
                 </div>

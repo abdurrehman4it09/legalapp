@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -40,8 +40,13 @@ import {
   RBACRole,
   RBAC_ROLE_PERMISSIONS,
   normalizeRBACRole,
-} from "@/app/supabase";
+} from "@/lib/supabase";
 import { useAuthRBAC } from "@/app/AuthContext";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+  useEscapeToClose,
+} from "./SharedUI";
 
 export interface UserSession {
   id?: number;
@@ -69,6 +74,7 @@ export function GlobalSearchModal({
 }) {
   const [query, setQuery] = useState("");
   const isUr = lang === "ur";
+  useEscapeToClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -118,11 +124,14 @@ export function GlobalSearchModal({
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start justify-center pt-16 px-4 pb-8 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Global Search Overlay"
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start justify-center pt-12 sm:pt-16 px-4 pb-8 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className={`bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-3xl shadow-2xl overflow-hidden ${
+        className={`bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${
           isUr ? "font-urdu" : "font-legal"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -139,13 +148,15 @@ export function GlobalSearchModal({
                 ? "اسکرین 03 • مضامین، قوانین (PPC/آئین)، وکلاء یا قانونی مسودات تلاش کریں..."
                 : "Screen 03 Global Search • Statutes (Art 10A, Sec 489-F), articles, advocates, or templates..."
             }
-            className="w-full bg-transparent text-base font-ui focus:outline-none text-stone-900 placeholder:text-stone-400"
+            className="w-full bg-transparent text-base font-ui focus:outline-none text-stone-900 placeholder:text-stone-400 min-w-0"
           />
           <button
+            type="button"
+            aria-label="Close global search modal"
             onClick={onClose}
-            className="p-1.5 text-stone-500 hover:text-stone-900 font-ui text-xs flex items-center gap-1 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-900 hover:bg-stone-100 font-ui text-xs transition-all duration-200 active:scale-[0.98] cursor-pointer shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -232,23 +243,24 @@ export function GlobalSearchModal({
             </div>
             <div className="divide-y divide-stone-200 border border-stone-200 bg-white">
               {matchedTemplates.map((tpl) => (
-                <div
+                <Link
                   key={tpl.id}
+                  href={isUr ? "/urdu#templates-qa" : "/templates"}
                   onClick={onClose}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-stone-50 transition-colors cursor-pointer"
+                  className="flex items-center justify-between min-h-[44px] px-4 py-3 hover:bg-stone-50 transition-all duration-200 active:scale-[0.98]"
                 >
-                  <div>
-                    <div className="text-sm font-semibold text-stone-900">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-stone-900 break-words">
                       {isUr ? tpl.title_urdu || tpl.title : tpl.title}
                     </div>
                     <div className="text-xs text-stone-500">
                       {tpl.pages} Pages · Bilingual EN/UR
                     </div>
                   </div>
-                  <span className="font-mono-code text-xs font-semibold text-stone-900">
+                  <span className="font-mono-code text-xs font-semibold text-stone-900 shrink-0">
                     PKR {tpl.price}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -291,90 +303,140 @@ export function SmartAuthModal({
   const [practiceYears, setPracticeYears] = useState("7");
   const [highCourt, setHighCourt] = useState("Islamabad High Court");
   const [licenseFile, setLicenseFile] = useState("Bar_Council_License_Card_Verified.pdf");
+  const [isAuthPending, startAuthTransition] = useTransition();
+  const [authFeedback, setAuthFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
+
+  useEscapeToClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
   const completeClientSetup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rbacRole: RBACRole =
-      role === "editorial_manager"
-        ? "Editorial Manager"
-        : role === "admin"
-        ? "Admin"
-        : "Client";
-    const defaultName =
-      rbacRole === "Editorial Manager"
-        ? "Zainab Qureshi (Editorial Manager)"
-        : rbacRole === "Admin"
-        ? "Justice (R) Tariq Mehmood (Admin)"
-        : isUr
-        ? "طارق محمود"
-        : "Tariq Mehmood";
-    const userName = fullName || defaultName;
-    const verifiedSession = await loginAndVerifyRole({
-      phoneOrEmail,
-      fullName: userName,
-      role: rbacRole,
-      city,
-      lang,
-      interests,
-      verificationStatus: "Verified",
+    setAuthFeedback({ status: "loading", message: null });
+    startAuthTransition(async () => {
+      try {
+        const rbacRole: RBACRole =
+          role === "editorial_manager"
+            ? "Editorial Manager"
+            : role === "admin"
+            ? "Admin"
+            : "Client";
+        const defaultName =
+          rbacRole === "Editorial Manager"
+            ? "Zainab Qureshi (Editorial Manager)"
+            : rbacRole === "Admin"
+            ? "Justice (R) Tariq Mehmood (Admin)"
+            : isUr
+            ? "طارق محمود"
+            : "Tariq Mehmood";
+        const userName = fullName || defaultName;
+        const verifiedSession = await loginAndVerifyRole({
+          phoneOrEmail,
+          fullName: userName,
+          role: rbacRole,
+          city,
+          lang,
+          interests,
+          verificationStatus: "Verified",
+        });
+        setAuthFeedback({
+          status: "success",
+          message: `Verified profile "${userName}" (${rbacRole}) in public.users_profiles.`,
+        });
+        onSuccess(verifiedSession);
+        onClose();
+      } catch (err: any) {
+        setAuthFeedback({
+          status: "error",
+          message: err?.message || "Failed to save client profile.",
+        });
+      }
     });
-    onSuccess(verifiedSession);
-    onClose();
   };
 
   const finalizeLawyerSession = async () => {
-    const lawyerName = fullName || (isUr ? "ایڈووکیٹ حمزہ گیلانی" : "Adv. Hamza Gilani");
-    const uploadRes = await supabase.storage
-      .from("bar-licenses")
-      .upload(`${barCouncilId}_${licenseFile}`);
-    const verifiedSession = await loginAndVerifyRole({
-      phoneOrEmail,
-      fullName: lawyerName,
-      role: "Verified Advocate",
-      city,
-      lang,
-      interests,
-      barCouncilId,
-      highCourt,
-      barLicenseUrl:
-        uploadRes?.data?.fullPath || `storage://bar-licenses/${licenseFile}`,
-      verificationStatus: "Verified",
+    setAuthFeedback({ status: "loading", message: null });
+    startAuthTransition(async () => {
+      try {
+        const lawyerName = fullName || (isUr ? "ایڈووکیٹ حمزہ گیلانی" : "Adv. Hamza Gilani");
+        const uploadRes = await supabase.storage
+          .from("bar-licenses")
+          .upload(`${barCouncilId}_${licenseFile}`);
+        const verifiedSession = await loginAndVerifyRole({
+          phoneOrEmail,
+          fullName: lawyerName,
+          role: "Verified Advocate",
+          city,
+          lang,
+          interests,
+          barCouncilId,
+          highCourt,
+          barLicenseUrl:
+            uploadRes?.data?.fullPath || `storage://bar-licenses/${licenseFile}`,
+          verificationStatus: "Verified",
+        });
+        setAuthFeedback({
+          status: "success",
+          message: `Advocate profile verified in public.users_profiles (${barCouncilId}).`,
+        });
+        onSuccess(verifiedSession);
+        onClose();
+      } catch (err: any) {
+        setAuthFeedback({
+          status: "error",
+          message: err?.message || "Failed to verify advocate credentials.",
+        });
+      }
     });
-    onSuccess(verifiedSession);
-    onClose();
   };
 
-  const handleQuickRoleSync = async (targetRole: RBACRole) => {
-    const verifiedSession = await switchRoleAndVerify(targetRole);
-    onSuccess(verifiedSession);
-    onClose();
+  const handleQuickRoleSync = (targetRole: RBACRole) => {
+    setAuthFeedback({ status: "loading", message: null });
+    startAuthTransition(async () => {
+      const verifiedSession = await switchRoleAndVerify(targetRole);
+      setAuthFeedback({
+        status: "success",
+        message: `Synced session as ${targetRole} in public.users_profiles.`,
+      });
+      onSuccess(verifiedSession);
+      onClose();
+    });
   };
 
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Smart Authentication Gateway"
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-lg shadow-2xl overflow-hidden font-ui"
+        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-lg shadow-2xl overflow-hidden font-ui animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-[#064E3B] text-white px-6 py-5 flex items-center justify-between border-b border-[#B48327]/40">
-          <div className="flex items-center gap-2.5">
-            <Scale className="w-5 h-5 text-[#D4AF37]" />
-            <div>
-              <span className="text-[11px] uppercase tracking-widest text-[#D4AF37] block font-medium">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Scale className="w-5 h-5 text-[#D4AF37] shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[11px] uppercase tracking-widest text-[#D4AF37] block font-medium truncate">
                 {isUr ? "ماڈیول 2 • اسمارٹ تصدیقی گیٹ وے (Screens 13–20)" : "Module 2 • Smart Auth Gateway (Screens 13–20)"}
               </span>
-              <h3 className="text-base font-bold tracking-tight">
+              <h3 className="text-base font-bold tracking-tight break-words">
                 {isUr ? "دی ڈیلی لیگل بریف — اکاؤنٹ تصدیق" : "The Daily Legal Brief — Zero-Trust Auth"}
               </h3>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white p-1 cursor-pointer">
+          <button
+            type="button"
+            aria-label="Close authentication modal"
+            onClick={onClose}
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-white/80 hover:text-white hover:bg-emerald-900/60 transition-all duration-200 active:scale-[0.98] cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -408,7 +470,12 @@ export function SmartAuthModal({
           ))}
         </div>
 
-        <div className="p-6 sm:p-8">
+        <div className="p-6 sm:p-8 space-y-4">
+          <MutationFeedbackBanner
+            status={authFeedback.status}
+            message={authFeedback.message}
+            onDismiss={() => setAuthFeedback({ status: "idle", message: null })}
+          />
           {step === "13_sheet" && (
             <div className="space-y-5">
               <div className="p-4 bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2.5">
@@ -429,7 +496,7 @@ export function SmartAuthModal({
               <button
                 type="button"
                 onClick={() => setStep("14_login")}
-                className="w-full py-3.5 px-4 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                className="w-full min-h-[44px] py-3.5 px-4 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 {isUr ? "اسکرین 14 پر جائیں (+92 لاگ ان)" : "Proceed to +92 Phone / Email Login (Screen 14) →"}
               </button>
@@ -438,28 +505,35 @@ export function SmartAuthModal({
 
           {step === "14_login" && (
             <form
-              onSubmit={async (e) => {
+              onSubmit={(e) => {
                 e.preventDefault();
-                const isEmail = phoneOrEmail.includes("@");
-                const otpRes = await supabase.auth.signInWithOtp(
-                  isEmail ? { email: phoneOrEmail } : { phone: phoneOrEmail }
-                );
-                const matched = otpRes?.data?.matchedProfile;
-                if (matched) {
-                  setFullName(matched.full_name || "");
-                  setCity(matched.city || "Islamabad");
-                  const norm = normalizeRBACRole(matched.role);
-                  setRole(
-                    norm === "Verified Advocate"
-                      ? "advocate"
-                      : norm === "Editorial Manager"
-                      ? "editorial_manager"
-                      : norm === "Admin"
-                      ? "admin"
-                      : "client"
+                setAuthFeedback({ status: "loading", message: null });
+                startAuthTransition(async () => {
+                  const isEmail = phoneOrEmail.includes("@");
+                  const otpRes = await supabase.auth.signInWithOtp(
+                    isEmail ? { email: phoneOrEmail } : { phone: phoneOrEmail }
                   );
-                }
-                setStep("15_otp");
+                  const matched = otpRes?.data?.matchedProfile;
+                  if (matched) {
+                    setFullName(matched.full_name || "");
+                    setCity(matched.city || "Islamabad");
+                    const norm = normalizeRBACRole(matched.role);
+                    setRole(
+                      norm === "Verified Advocate"
+                        ? "advocate"
+                        : norm === "Editorial Manager"
+                        ? "editorial_manager"
+                        : norm === "Admin"
+                        ? "admin"
+                        : "client"
+                    );
+                  }
+                  setAuthFeedback({
+                    status: "success",
+                    message: `4-digit OTP dispatched to ${phoneOrEmail}.`,
+                  });
+                  setStep("15_otp");
+                });
               }}
               className="space-y-5"
             >
@@ -481,15 +555,25 @@ export function SmartAuthModal({
                   required
                   value={phoneOrEmail}
                   onChange={(e) => setPhoneOrEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-stone-300 text-stone-900 text-sm focus:outline-none focus:border-[#064E3B] font-mono-code"
+                  className="w-full min-h-[44px] px-4 py-3 bg-white border border-stone-300 text-stone-900 text-sm focus:outline-none focus:border-[#064E3B] font-mono-code"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-[#064E3B] hover:bg-emerald-950 text-white text-sm font-semibold transition-colors cursor-pointer"
+                disabled={isAuthPending}
+                className="w-full min-h-[44px] py-3 px-4 bg-[#064E3B] hover:bg-emerald-950 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                {isUr ? "تصدیقی کوڈ حاصل کریں (Screen 15)" : "Send 4-Digit OTP Code (Screen 15)"}
+                {isAuthPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : isUr ? (
+                  "تصدیقی کوڈ حاصل کریں (Screen 15)"
+                ) : (
+                  "Send 4-Digit OTP Code (Screen 15)"
+                )}
               </button>
 
               {/* 1-Click Supabase users_profiles RBAC Demo Logins */}
@@ -711,9 +795,17 @@ export function SmartAuthModal({
 
               <button
                 type="submit"
-                className="w-full py-3 bg-[#064E3B] text-white text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                disabled={isAuthPending}
+                className="w-full min-h-[44px] py-3 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Complete Client Setup & Unlock Platform
+                {isAuthPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Complete Client Setup & Unlock Platform"
+                )}
               </button>
             </form>
           )}
@@ -842,10 +934,18 @@ export function SmartAuthModal({
               </p>
               <button
                 type="button"
+                disabled={isAuthPending}
                 onClick={finalizeLawyerSession}
-                className="w-full py-3 bg-[#064E3B] text-white text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                className="w-full min-h-[44px] py-3 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Approve & Enter Advocate CRM (Screens 35–49)
+                {isAuthPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Approve & Enter Advocate CRM (Screens 35–49)"
+                )}
               </button>
             </div>
           )}
@@ -893,6 +993,14 @@ export function LegalAIWorkspaceModal({
       citations: getTableData("ai_citations"),
     },
   ]);
+
+  useEscapeToClose(isOpen, () => {
+    if (selectedCitation) {
+      setSelectedCitation(null);
+    } else {
+      onClose();
+    }
+  });
 
   if (!isOpen) return null;
 
@@ -983,17 +1091,20 @@ export function LegalAIWorkspaceModal({
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Legal AI Assistant and Researcher Pro"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-6xl h-[86vh] flex flex-col shadow-2xl overflow-hidden font-ui"
+        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-6xl h-[86vh] flex flex-col shadow-2xl overflow-hidden font-ui animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-[#064E3B] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-[#B48327]/40 shrink-0">
-          <div className="flex items-center gap-3">
-            <Scale className="w-5 h-5 text-[#D4AF37]" />
-            <h3 className="text-sm sm:text-base font-bold tracking-tight">
+          <div className="flex items-center gap-3 min-w-0">
+            <Scale className="w-5 h-5 text-[#D4AF37] shrink-0" />
+            <h3 className="text-sm sm:text-base font-bold tracking-tight break-words">
               {mode === "researcher"
                 ? "Screen 40 • AI Researcher Pro (Split-Pane Legal RAG & Petition Editor)"
                 : "Screen 28 • Basic AI Legal Assistant Chat"}
@@ -1005,7 +1116,7 @@ export function LegalAIWorkspaceModal({
               aria-label="Select Gemini Model Speed"
               value={speed}
               onChange={(e) => setSpeed(e.target.value as "general" | "fast")}
-              className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-950 text-emerald-100 border border-emerald-700 cursor-pointer"
+              className="min-h-[40px] px-2.5 py-1.5 text-xs font-semibold bg-emerald-950 text-emerald-100 border border-emerald-700 cursor-pointer"
             >
               <option value="general">Model: gemini-3.8-flash (General)</option>
               <option value="fast">Model: gemini-3.1-flash-lite (Fast)</option>
@@ -1013,7 +1124,7 @@ export function LegalAIWorkspaceModal({
             <button
               type="button"
               onClick={() => setMode("assistant")}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                 mode === "assistant"
                   ? "bg-white text-[#064E3B]"
                   : "bg-emerald-900/60 text-white"
@@ -1024,7 +1135,7 @@ export function LegalAIWorkspaceModal({
             <button
               type="button"
               onClick={() => setMode("researcher")}
-              className={`px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+              className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                 mode === "researcher"
                   ? "bg-[#D4AF37] text-stone-950"
                   : "bg-emerald-900/60 text-white"
@@ -1035,11 +1146,16 @@ export function LegalAIWorkspaceModal({
             <button
               type="button"
               onClick={() => setShowPromptSheet(!showPromptSheet)}
-              className="px-3 py-1.5 text-xs font-semibold bg-emerald-950 text-[#D4AF37] border border-[#D4AF37]/40 cursor-pointer"
+              className="min-h-[40px] px-3 py-1.5 text-xs font-semibold bg-emerald-950 text-[#D4AF37] border border-[#D4AF37]/40 transition-all duration-200 active:scale-[0.98] cursor-pointer"
             >
               Screen 41 Prompts
             </button>
-            <button onClick={onClose} className="p-1.5 text-white/80 hover:text-white cursor-pointer">
+            <button
+              type="button"
+              aria-label="Close AI workspace modal"
+              onClick={onClose}
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-white/80 hover:text-white hover:bg-emerald-900/60 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -1075,7 +1191,12 @@ export function LegalAIWorkspaceModal({
               <div className="p-4 bg-white border-b border-stone-300 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-[#064E3B]">
                   <span>Screen 41 • AI Prompt Suggestions Bottom Sheet</span>
-                  <button onClick={() => setShowPromptSheet(false)}>
+                  <button
+                    type="button"
+                    aria-label="Close AI prompt suggestions"
+                    onClick={() => setShowPromptSheet(false)}
+                    className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1248,10 +1369,19 @@ export function LegalAIWorkspaceModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[44px] px-5 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer shrink-0"
               >
-                <Send className="w-3.5 h-3.5" />
-                <span>Consult AI</span>
+                {loading ? (
+                  <>
+                    <InlineSpinner className="w-3.5 h-3.5" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Consult AI</span>
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -1270,7 +1400,7 @@ export function LegalAIWorkspaceModal({
                 <button
                   type="button"
                   onClick={() => navigator.clipboard?.writeText(petitionDraft)}
-                  className="px-3 py-1 text-xs border border-stone-300 bg-white hover:bg-stone-100 font-medium cursor-pointer"
+                  className="min-h-[36px] px-3 py-1 text-xs border border-stone-300 bg-white hover:bg-stone-100 font-medium transition-all duration-200 active:scale-[0.98] cursor-pointer"
                 >
                   Copy Petition
                 </button>
@@ -1287,19 +1417,27 @@ export function LegalAIWorkspaceModal({
         {/* Screen 42: Citation Details Modal */}
         {selectedCitation && (
           <div
-            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Citation Details Modal"
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 animate-in fade-in duration-200"
             onClick={() => setSelectedCitation(null)}
           >
             <div
-              className="bg-white border border-stone-300 max-w-md w-full p-6 shadow-xl space-y-4"
+              className="bg-white border border-stone-300 max-w-md w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-stone-200 pb-3">
                 <span className="font-mono-code text-xs font-bold text-[#064E3B]">
                   Screen 42 • Citation Details Modal ({selectedCitation.code})
                 </span>
-                <button onClick={() => setSelectedCitation(null)}>
-                  <X className="w-4 h-4 text-stone-500" />
+                <button
+                  type="button"
+                  aria-label="Close citation details modal"
+                  onClick={() => setSelectedCitation(null)}
+                  className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
                 </button>
               </div>
               <h4 className="text-base font-bold font-legal text-stone-900">
@@ -1308,14 +1446,14 @@ export function LegalAIWorkspaceModal({
               <p className="text-xs text-stone-600 leading-relaxed">
                 {selectedCitation.summary}
               </p>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
                 <Link
                   href="/laws/1"
                   onClick={() => {
                     setSelectedCitation(null);
                     onClose();
                   }}
-                  className="px-4 py-2 border border-stone-300 text-xs font-semibold text-stone-800"
+                  className="min-h-[44px] inline-flex items-center px-4 py-2 border border-stone-300 hover:bg-stone-50 text-xs font-semibold text-stone-800 transition-all duration-200 active:scale-[0.98]"
                 >
                   Read Full Text (Screen 12)
                 </Link>
@@ -1329,7 +1467,7 @@ export function LegalAIWorkspaceModal({
                     setSelectedCitation(null);
                     setMode("researcher");
                   }}
-                  className="px-4 py-2 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                  className="min-h-[44px] px-4 py-2 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer"
                 >
                   Insert into Petition
                 </button>
@@ -1360,6 +1498,7 @@ export function TemplatePreviewModal({
 }) {
   const [unlocked, setUnlocked] = useState(false);
   const isUr = lang === "ur";
+  useEscapeToClose(Boolean(template), onClose);
 
   if (!template) return null;
 
@@ -1374,23 +1513,31 @@ export function TemplatePreviewModal({
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Template Preview Modal"
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-2xl shadow-2xl overflow-hidden font-ui"
+        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-2xl shadow-2xl overflow-hidden font-ui animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between">
-          <div>
+        <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <span className="text-[11px] uppercase tracking-widest text-[#D4AF37] block">
               Screen 09 • Watermarked Template Preview Modal
             </span>
-            <h3 className="text-base font-bold">
+            <h3 className="text-base font-bold break-words">
               {isUr ? template.title_urdu || template.title : template.title}
             </h3>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            aria-label="Close template preview modal"
+            onClick={onClose}
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-stone-800 transition-all duration-200 active:scale-[0.98] cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1480,75 +1627,104 @@ export function BookingEscrowModal({
   >("Safepay Card");
   const [caseBrief, setCaseBrief] = useState("");
   const [rating, setRating] = useState(5);
+  const [isBookingPending, startBookingTransition] = useTransition();
+  const [bookingFeedback, setBookingFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
+
+  useEscapeToClose(Boolean(lawyer), onClose);
 
   if (!lawyer) return null;
 
-  const confirmBooking = async () => {
+  const confirmBooking = () => {
     if (!userSession) {
       onRequireAuth();
       return;
     }
-    const grossFee = Number(lawyer.fee) || 3500;
-    const platformCommission = Math.round(grossFee * 0.15);
-    const lawyerShare = grossFee - platformCommission;
-    const roomId = `VIDEO-CHAMBER-${lawyer.id || 901}`;
+    setBookingFeedback({ status: "loading", message: null });
+    startBookingTransition(async () => {
+      try {
+        const grossFee = Number(lawyer.fee) || 3500;
+        const platformCommission = Math.round(grossFee * 0.15);
+        const lawyerShare = grossFee - platformCommission;
+        const roomId = `VIDEO-CHAMBER-${lawyer.id || 901}`;
 
-    const newAppt = {
-      lawyer_id: lawyer.id,
-      lawyer_name: lawyer.name,
-      lawyer_name_urdu: lawyer.name_urdu || lawyer.name,
-      court: lawyer.court || "High Court",
-      client_name: userSession.name,
-      date: selectedDate,
-      time_slot: selectedSlot,
-      fee: grossFee,
-      escrow_amount: lawyerShare,
-      platform_commission: platformCommission,
-      payment_method: `${paymentMethod} Escrow`,
-      video_room_id: roomId,
-      status: "Escrow Locked",
-      case_summary: caseBrief || "Legal consultation & document review.",
-    };
-
-    await Promise.all([
-      supabase.from("appointments").insert([newAppt]),
-      supabase.from("escrow_ledger").insert([
-        {
-          appointment_id: lawyer.id || 901,
-          client_name: userSession.name,
+        const newAppt = {
+          lawyer_id: lawyer.id,
           lawyer_name: lawyer.name,
-          gross_amount_pkr: grossFee,
-          lawyer_share_pkr: lawyerShare,
-          platform_fee_pkr: platformCommission,
-          payment_gateway: paymentMethod,
-          accounting_state: "Funds Held in Escrow",
-          milestone_label: caseBrief || "Initial Video Consultation Retainer",
-        },
-      ]),
-    ]);
-    setStep("25_success");
+          lawyer_name_urdu: lawyer.name_urdu || lawyer.name,
+          court: lawyer.court || "High Court",
+          client_name: userSession.name,
+          date: selectedDate,
+          time_slot: selectedSlot,
+          fee: grossFee,
+          escrow_amount: lawyerShare,
+          platform_commission: platformCommission,
+          payment_method: `${paymentMethod} Escrow`,
+          video_room_id: roomId,
+          status: "Escrow Locked",
+          case_summary: caseBrief || "Legal consultation & document review.",
+        };
+
+        await Promise.all([
+          supabase.from("appointments").insert([newAppt]),
+          supabase.from("escrow_ledger").insert([
+            {
+              appointment_id: lawyer.id || 901,
+              client_name: userSession.name,
+              lawyer_name: lawyer.name,
+              gross_amount_pkr: grossFee,
+              lawyer_share_pkr: lawyerShare,
+              platform_fee_pkr: platformCommission,
+              payment_gateway: paymentMethod,
+              accounting_state: "Funds Held in Escrow",
+              milestone_label: caseBrief || "Initial Video Consultation Retainer",
+            },
+          ]),
+        ]);
+        setBookingFeedback({
+          status: "success",
+          message: `PKR ${grossFee.toLocaleString()} locked in ${paymentMethod} Escrow.`,
+        });
+        setStep("25_success");
+      } catch (err: any) {
+        setBookingFeedback({
+          status: "error",
+          message: err?.message || "Failed to process Escrow deposit.",
+        });
+      }
+    });
   };
 
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Appointment Booking and Escrow Checkout"
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-xl shadow-2xl overflow-hidden font-ui"
+        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-xl shadow-2xl overflow-hidden font-ui animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-[#064E3B] text-white px-6 py-4 flex items-center justify-between border-b border-[#B48327]/40">
-          <div>
+        <div className="bg-[#064E3B] text-white px-6 py-4 flex items-center justify-between border-b border-[#B48327]/40 gap-3">
+          <div className="min-w-0">
             <span className="text-[11px] uppercase tracking-widest text-[#D4AF37] block">
               Screens 22–25 & 55–56 • Escrow Booking & Video Chamber
             </span>
-            <h3 className="text-base font-bold">
+            <h3 className="text-base font-bold break-words">
               {isUr ? lawyer.name_urdu || lawyer.name : lawyer.name}
             </h3>
           </div>
-          <button onClick={onClose} className="text-white/80 hover:text-white cursor-pointer">
+          <button
+            type="button"
+            aria-label="Close booking escrow modal"
+            onClick={onClose}
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-white/80 hover:text-white hover:bg-emerald-900/60 transition-all duration-200 active:scale-[0.98] cursor-pointer shrink-0"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -1731,16 +1907,28 @@ export function BookingEscrowModal({
 
               <button
                 type="button"
+                disabled={isBookingPending}
                 onClick={confirmBooking}
-                className="w-full py-3 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                className="w-full min-h-[44px] py-3 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Authorize Escrow Deposit — PKR {(lawyer.fee || 3500).toLocaleString()}
+                {isBookingPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  `Authorize Escrow Deposit — PKR ${(lawyer.fee || 3500).toLocaleString()}`
+                )}
               </button>
             </div>
           )}
 
           {step === "25_success" && (
             <div className="text-center space-y-4 py-2">
+              <MutationFeedbackBanner
+                status={bookingFeedback.status}
+                message={bookingFeedback.message}
+              />
               <CheckCircle2 className="w-10 h-10 text-[#064E3B] mx-auto" />
               <div className="text-xs uppercase tracking-widest text-[#B48327] font-semibold">
                 Screen 25 • Payment Success Modal
@@ -1815,10 +2003,14 @@ export function BookingEscrowModal({
 
           {step === "56_rating" && (
             <div className="text-center space-y-4 py-2">
+              <MutationFeedbackBanner
+                status={bookingFeedback.status}
+                message={bookingFeedback.message}
+              />
               <div className="text-xs uppercase tracking-widest text-stone-500">
                 Screen 56 • End Call / 5-Star Rating Modal
               </div>
-              <h4 className="text-lg font-bold font-legal text-stone-900">
+              <h4 className="text-lg font-bold font-legal text-stone-900 break-words">
                 Rate Your Consultation with {lawyer.name}
               </h4>
               <div className="flex justify-center gap-2">
@@ -1826,11 +2018,12 @@ export function BookingEscrowModal({
                   <button
                     key={star}
                     type="button"
+                    aria-label={`Rate ${star} stars`}
                     onClick={() => setRating(star)}
-                    className={`p-2 border cursor-pointer ${
+                    className={`min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-2 border transition-all duration-200 active:scale-[0.98] cursor-pointer ${
                       star <= rating
                         ? "border-[#B48327] bg-amber-50 text-[#B48327]"
-                        : "border-stone-200 text-stone-300"
+                        : "border-stone-200 text-stone-300 hover:bg-stone-50"
                     }`}
                   >
                     <Star className="w-5 h-5 fill-current" />
@@ -1839,22 +2032,37 @@ export function BookingEscrowModal({
               </div>
               <button
                 type="button"
-                onClick={async () => {
-                  await supabase.from("video_consultation_logs").insert([
-                    {
-                      room_id: `VIDEO-CHAMBER-${lawyer.id || 901}`,
-                      lawyer_name: lawyer.name,
-                      client_name: userSession?.name || "Verified Client",
-                      duration_minutes: 30,
-                      post_call_rating: rating,
-                      client_review: `Completed video consultation (${rating}/5 stars) — Escrow milestone verified.`,
-                    },
-                  ]);
-                  onClose();
+                disabled={isBookingPending}
+                onClick={() => {
+                  setBookingFeedback({ status: "loading", message: null });
+                  startBookingTransition(async () => {
+                    await supabase.from("video_consultation_logs").insert([
+                      {
+                        room_id: `VIDEO-CHAMBER-${lawyer.id || 901}`,
+                        lawyer_name: lawyer.name,
+                        client_name: userSession?.name || "Verified Client",
+                        duration_minutes: 30,
+                        post_call_rating: rating,
+                        client_review: `Completed video consultation (${rating}/5 stars) — Escrow milestone verified.`,
+                      },
+                    ]);
+                    setBookingFeedback({
+                      status: "success",
+                      message: "Escrow released and 5-star consultation rating saved.",
+                    });
+                    onClose();
+                  });
                 }}
-                className="w-full py-2.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                className="w-full min-h-[44px] py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
               >
-                Release Escrow & Submit Rating
+                {isBookingPending ? (
+                  <>
+                    <InlineSpinner className="w-4 h-4" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Release Escrow & Submit Rating"
+                )}
               </button>
             </div>
           )}
@@ -1910,27 +2118,32 @@ export function Master61ScreenExplorerModal({
   const [profileNameEdit, setProfileNameEdit] = useState("Tariq Mehmood");
   const [profileSaved, setProfileSaved] = useState(false);
 
+  useEscapeToClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Master 61-Screen Architecture Explorer"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-6xl h-[88vh] flex flex-col shadow-2xl overflow-hidden font-ui"
+        className="bg-[#FBF9F5] text-[#111111] border border-stone-300 w-full max-w-6xl h-[88vh] flex flex-col shadow-2xl overflow-hidden font-ui animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="bg-stone-950 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-[#B48327]/50 shrink-0">
-          <div className="flex items-center gap-3">
-            <Scale className="w-5 h-5 text-[#10B981]" />
-            <div>
+          <div className="flex items-center gap-3 min-w-0">
+            <Scale className="w-5 h-5 text-[#10B981] shrink-0" />
+            <div className="min-w-0">
               <span className="text-[11px] uppercase tracking-widest text-[#10B981] block font-semibold">
                 Complete 61-Screen & 5-Module Information Architecture
               </span>
-              <h3 className="text-sm sm:text-base font-bold">
+              <h3 className="text-sm sm:text-base font-bold break-words">
                 Interactive Screen, Bottom Sheet & Modal Command Deck (Screens 01–61)
               </h3>
             </div>
@@ -1941,12 +2154,17 @@ export function Master61ScreenExplorerModal({
               <button
                 type="button"
                 onClick={() => setActiveScreenView("overview")}
-                className="px-3 py-1.5 bg-[#064E3B] text-white text-xs font-semibold cursor-pointer"
+                className="min-h-[44px] px-3 py-1.5 bg-[#064E3B] text-white text-xs font-semibold transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 ← Back to All 61 Screens Index
               </button>
             )}
-            <button onClick={onClose} className="p-1 text-white/70 hover:text-white cursor-pointer">
+            <button
+              type="button"
+              aria-label="Close 61-screen explorer modal"
+              onClick={onClose}
+              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-stone-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            >
               <X className="w-5 h-5" />
             </button>
           </div>

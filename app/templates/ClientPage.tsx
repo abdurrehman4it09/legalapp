@@ -47,17 +47,17 @@ export default function TemplatesStorefrontPage() {
               High Court vetted agreements (Rent Deeds, NDAs, Succession Affidavits, Freelance IT Contracts). Preview watermarked clauses or unlock via Auth.
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <Link
               href="/"
-              className="px-3.5 py-2 bg-white border border-stone-300 font-semibold flex items-center gap-1"
+              className="px-3.5 py-2 min-h-[44px] bg-white hover:bg-stone-50 active:scale-[0.98] transition-all duration-200 border border-stone-300 font-semibold flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Magazine Home (/)</span>
             </Link>
             <Link
               href="/admin?tab=templates"
-              className="px-3.5 py-2 bg-[#064E3B] text-white font-semibold"
+              className="px-3.5 py-2 min-h-[44px] bg-[#064E3B] hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 text-white font-semibold flex items-center"
             >
               Supply Templates in Admin →
             </Link>
@@ -68,34 +68,34 @@ export default function TemplatesStorefrontPage() {
           {templates.map((tpl) => (
             <div
               key={tpl.id}
-              className="bg-white border border-stone-300 p-6 flex flex-col justify-between space-y-4 hover:border-[#064E3B] transition"
+              className="bg-white border border-stone-300 p-6 flex flex-col justify-between space-y-4 hover:border-[#064E3B] hover:bg-stone-50/40 transition-all duration-200 overflow-hidden"
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="px-2 py-0.5 bg-stone-100 border border-stone-300 font-semibold text-stone-800">
+                  <span className="px-2 py-0.5 bg-stone-100 border border-stone-300 font-semibold text-stone-800 truncate">
                     {tpl.category}
                   </span>
-                  <span className="font-mono-code font-bold text-[#064E3B]">
+                  <span className="font-mono-code font-bold text-[#064E3B] shrink-0">
                     PKR {Number(tpl.price || 1500).toLocaleString()}
                   </span>
                 </div>
-                <h2 className="text-lg font-bold font-legal text-stone-950">
+                <h2 className="text-lg font-bold font-legal text-stone-950 break-words">
                   {tpl.title}
                 </h2>
                 {tpl.title_urdu && (
                   <div
                     dir="rtl"
-                    className="text-sm font-urdu text-[#064E3B] font-bold"
+                    className="text-sm font-urdu text-[#064E3B] font-bold break-words"
                   >
                     {tpl.title_urdu}
                   </div>
                 )}
-                <p className="text-xs text-stone-600 leading-relaxed">
+                <p className="text-xs text-stone-600 leading-relaxed break-words">
                   {tpl.summary}
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-stone-200 flex items-center justify-between gap-2 text-xs">
+              <div className="pt-4 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className="font-mono-code text-stone-500">
                   {tpl.pages || 5} Pages · Word / PDF
                 </span>
@@ -103,14 +103,14 @@ export default function TemplatesStorefrontPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedTemplate(tpl)}
-                    className="px-3 py-1.5 bg-stone-900 text-white font-semibold flex items-center gap-1 cursor-pointer"
+                    className="px-3.5 py-2 min-h-[44px] bg-stone-900 hover:bg-stone-800 active:scale-[0.98] transition-all duration-200 text-white font-semibold flex items-center gap-1.5 cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5 text-[#D4AF37]" />
                     <span>Screen 09 Preview</span>
                   </button>
                   <Link
                     href="/auth/login?next=/templates"
-                    className="px-3 py-1.5 bg-[#064E3B] text-white font-semibold flex items-center gap-1"
+                    className="px-3.5 py-2 min-h-[44px] bg-[#064E3B] hover:bg-emerald-950 active:scale-[0.98] transition-all duration-200 text-white font-semibold flex items-center gap-1.5"
                   >
                     <Lock className="w-3.5 h-3.5 text-[#D4AF37]" />
                     <span>Unlock</span>

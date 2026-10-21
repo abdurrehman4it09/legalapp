@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import Header from "@/app/Header";
 import { submitProBonoApplicationServerAction } from "@/app/actions/platformActions";
 import { createClient } from "@/app/supabase";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+} from "@/app/components/SharedUI";
 import { ShieldCheck, Upload, FileText, ArrowLeft } from "lucide-react";
 
 const supabase = createClient();
@@ -21,7 +25,11 @@ export default function ProBonoApplyRoutePage() {
   const [fileName, setFileName] = useState("UC_Income_Affidavit_2026.pdf");
   const [guidelines, setGuidelines] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
-  const [submittedBanner, setSubmittedBanner] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{
+    status: "idle" | "loading" | "success" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
 
   async function loadData() {
     const [gRes, rRes] = await Promise.all([
@@ -36,22 +44,33 @@ export default function ProBonoApplyRoutePage() {
     loadData();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const res = await submitProBonoApplicationServerAction({
-      applicant,
-      monthlyIncome,
-      category,
-      certificateType,
-      fileName,
+    setFeedback({ status: "loading", message: null });
+    startTransition(async () => {
+      try {
+        const res = await submitProBonoApplicationServerAction({
+          applicant,
+          monthlyIncome,
+          category,
+          certificateType,
+          fileName,
+        });
+        if (res.row) {
+          await supabase.from("pro_bono_applications").insert([res.row]);
+        }
+        await loadData();
+        setFeedback({
+          status: "success",
+          message: `Pro-Bono Application for "${applicant}" stored in pro_bono_applications & income proof uploaded to Storage!`,
+        });
+      } catch (err: any) {
+        setFeedback({
+          status: "error",
+          message: err?.message || "Failed to submit Pro-Bono application.",
+        });
+      }
     });
-    if (res.row) {
-      await supabase.from("pro_bono_applications").insert([res.row]);
-    }
-    await loadData();
-    setSubmittedBanner(
-      `Pro-Bono Application for "${applicant}" stored in pro_bono_applications & income proof uploaded to Storage!`
-    );
   }
 
   return (
@@ -71,11 +90,11 @@ export default function ProBonoApplyRoutePage() {
           </span>
         </div>
 
-        {submittedBanner && (
-          <div className="p-4 bg-emerald-950/10 border-l-4 border-[#064E3B] text-xs font-bold text-[#064E3B]">
-            {submittedBanner}
-          </div>
-        )}
+        <MutationFeedbackBanner
+          status={feedback.status}
+          message={feedback.message}
+          onDismiss={() => setFeedback({ status: "idle", message: null })}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Screen 33: Pro-Bono Application Form */}
@@ -167,9 +186,17 @@ export default function ProBonoApplyRoutePage() {
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#064E3B] text-white font-semibold uppercase tracking-wider cursor-pointer"
+              disabled={isPending}
+              className="w-full min-h-[44px] py-3.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-semibold uppercase tracking-wider inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
             >
-              Submit Pro-Bono Application & Upload Income Proof
+              {isPending ? (
+                <>
+                  <InlineSpinner className="w-4 h-4" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                "Submit Pro-Bono Application & Upload Income Proof"
+              )}
             </button>
           </form>
 

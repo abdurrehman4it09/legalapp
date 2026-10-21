@@ -1,12 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import Link from "next/link";
 import { createClient } from "@/app/supabase";
 import {
   saveMagazinePostServerAction,
   deleteMagazinePostServerAction,
 } from "@/app/actions/platformActions";
+import {
+  InlineSpinner,
+  MutationFeedbackBanner,
+  useEscapeToClose,
+} from "@/app/components/SharedUI";
 import {
   FileText,
   Plus,
@@ -34,11 +39,16 @@ export default function AdminEditorialCmsPage() {
   const [titleUrdu, setTitleUrdu] = useState("");
   const [contentUrdu, setContentUrdu] = useState("");
   const [banner, setBanner] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   // Popup 51 (Media Library / Embed Modal) & Popup 52 (Schedule Publishing Modal)
   const [mediaPopup51Open, setMediaPopup51Open] = useState(false);
   const [schedulePopup52Open, setSchedulePopup52Open] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("2026-11-01T09:00");
+
+  useEscapeToClose(mediaPopup51Open, () => setMediaPopup51Open(false));
+  useEscapeToClose(schedulePopup52Open, () => setSchedulePopup52Open(false));
 
   const loadPosts = async () => {
     const { data } = await supabase
@@ -52,64 +62,78 @@ export default function AdminEditorialCmsPage() {
     loadPosts();
   }, []);
 
-  const handleSave = async (e?: React.FormEvent) => {
+  const handleSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!title.trim()) return;
+    setErrorMsg(null);
+    setBanner(null);
 
-    await saveMagazinePostServerAction({
-      id: editingId,
-      title,
-      subtitle,
-      category,
-      author,
-      content,
-      title_urdu: titleUrdu || title,
-      content_urdu: contentUrdu || content,
+    startTransition(async () => {
+      try {
+        await saveMagazinePostServerAction({
+          id: editingId,
+          title,
+          subtitle,
+          category,
+          author,
+          content,
+          title_urdu: titleUrdu || title,
+          content_urdu: contentUrdu || content,
+        });
+
+        const row = {
+          title,
+          subtitle,
+          category,
+          author,
+          read_time: "6 min read",
+          content,
+          title_urdu: titleUrdu || title,
+          subtitle_urdu: subtitle,
+          category_urdu: "آئینی تجزیہ",
+          author_urdu: author,
+          read_time_urdu: "6 منٹ کا مطالعہ",
+          content_urdu: contentUrdu || content,
+          created_at: new Date().toISOString(),
+        };
+
+        if (editingId) {
+          await supabase.from("magazine_posts").update(row).eq("id", editingId);
+        } else {
+          await supabase
+            .from("magazine_posts")
+            .insert([{ id: Date.now(), ...row }]);
+        }
+
+        setEditingId(null);
+        setTitle("");
+        setSubtitle("");
+        setContent("");
+        setTitleUrdu("");
+        setContentUrdu("");
+        setSchedulePopup52Open(false);
+        setBanner(
+          "Saved to public.magazine_posts & executed revalidatePath('/') — Public Homepage & Article Reader updated!"
+        );
+        await loadPosts();
+      } catch (err: any) {
+        setErrorMsg(err?.message || "Failed to publish article.");
+      }
     });
-
-    const row = {
-      title,
-      subtitle,
-      category,
-      author,
-      read_time: "6 min read",
-      content,
-      title_urdu: titleUrdu || title,
-      subtitle_urdu: subtitle,
-      category_urdu: "آئینی تجزیہ",
-      author_urdu: author,
-      read_time_urdu: "6 منٹ کا مطالعہ",
-      content_urdu: contentUrdu || content,
-      created_at: new Date().toISOString(),
-    };
-
-    if (editingId) {
-      await supabase.from("magazine_posts").update(row).eq("id", editingId);
-    } else {
-      await supabase
-        .from("magazine_posts")
-        .insert([{ id: Date.now(), ...row }]);
-    }
-
-    setEditingId(null);
-    setTitle("");
-    setSubtitle("");
-    setContent("");
-    setTitleUrdu("");
-    setContentUrdu("");
-    setSchedulePopup52Open(false);
-    setBanner(
-      "Saved to public.magazine_posts & executed revalidatePath('/') — Public Homepage & Article Reader updated!"
-    );
-    setTimeout(() => setBanner(null), 5000);
-    await loadPosts();
   };
 
-  const handleDelete = async (id: number) => {
-    await deleteMagazinePostServerAction(id);
-    await supabase.from("magazine_posts").delete().eq("id", id);
-    setBanner(`Deleted article #${id} & revalidated public routes.`);
-    await loadPosts();
+  const handleDelete = (id: number) => {
+    setErrorMsg(null);
+    startTransition(async () => {
+      try {
+        await deleteMagazinePostServerAction(id);
+        await supabase.from("magazine_posts").delete().eq("id", id);
+        setBanner(`Deleted article #${id} & revalidated public routes.`);
+        await loadPosts();
+      } catch (err: any) {
+        setErrorMsg(err?.message || "Failed to delete article.");
+      }
+    });
   };
 
   return (
@@ -155,11 +179,14 @@ export default function AdminEditorialCmsPage() {
         </div>
       </div>
 
-      {banner && (
-        <div className="p-4 bg-emerald-950 text-[#D4AF37] border border-[#D4AF37] text-xs font-semibold">
-          {banner}
-        </div>
-      )}
+      <MutationFeedbackBanner
+        status={errorMsg ? "error" : banner ? "success" : "idle"}
+        message={errorMsg || banner}
+        onDismiss={() => {
+          setBanner(null);
+          setErrorMsg(null);
+        }}
+      />
 
       <form
         onSubmit={handleSave}
@@ -247,11 +274,19 @@ export default function AdminEditorialCmsPage() {
 
         <button
           type="submit"
-          className="px-6 py-2.5 bg-[#064E3B] text-white text-xs font-bold cursor-pointer"
+          disabled={isPending}
+          className="min-h-[44px] px-6 py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white text-xs font-bold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
         >
-          {editingId
-            ? "Update Article & Revalidate Public Routes"
-            : "Publish Article & Revalidate '/'"}
+          {isPending ? (
+            <>
+              <InlineSpinner className="w-4 h-4" />
+              <span>Processing...</span>
+            </>
+          ) : editingId ? (
+            "Update Article & Revalidate Public Routes"
+          ) : (
+            "Publish Article & Revalidate '/'"
+          )}
         </button>
       </form>
 
@@ -319,19 +354,27 @@ export default function AdminEditorialCmsPage() {
       {/* Popup 51: Media Library / Embed Modal */}
       {mediaPopup51Open && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Supabase Storage Media Library"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setMediaPopup51Open(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 text-xs"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 text-xs animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <strong className="text-sm text-stone-950">
                 Popup 51 • Supabase Storage Media Library (cms-media)
               </strong>
-              <button onClick={() => setMediaPopup51Open(false)}>
-                <X className="w-4 h-4 text-stone-500" />
+              <button
+                type="button"
+                aria-label="Close media library modal"
+                onClick={() => setMediaPopup51Open(false)}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             {[
@@ -346,7 +389,7 @@ export default function AdminEditorialCmsPage() {
                   setContent((prev) => `${prev}\n[Embedded Media: ${asset}]`);
                   setMediaPopup51Open(false);
                 }}
-                className="w-full text-left p-3 bg-white border border-stone-300 hover:border-[#064E3B] font-mono-code cursor-pointer"
+                className="w-full min-h-[44px] text-left p-3 bg-white border border-stone-300 hover:border-[#064E3B] hover:bg-stone-50 font-mono-code transition-all duration-200 active:scale-[0.98] cursor-pointer break-all"
               >
                 + Insert {asset}
               </button>
@@ -358,33 +401,49 @@ export default function AdminEditorialCmsPage() {
       {/* Popup 52: Schedule Publishing Modal */}
       {schedulePopup52Open && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Schedule Editorial Publication"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setSchedulePopup52Open(false)}
         >
           <div
-            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 text-xs"
+            className="bg-[#FBF9F5] border border-stone-300 w-full max-w-md p-6 shadow-2xl space-y-4 text-xs animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <strong className="text-sm text-stone-950">
                 Popup 52 • Schedule Editorial Publication
               </strong>
-              <button onClick={() => setSchedulePopup52Open(false)}>
-                <X className="w-4 h-4 text-stone-500" />
+              <button
+                type="button"
+                aria-label="Close schedule publication modal"
+                onClick={() => setSchedulePopup52Open(false)}
+                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-500 hover:text-stone-950 hover:bg-stone-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <input
               type="datetime-local"
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
-              className="w-full px-3 py-2 border border-stone-300 bg-white font-mono-code"
+              className="w-full min-h-[44px] px-3 py-2 border border-stone-300 bg-white font-mono-code"
             />
             <button
               type="button"
+              disabled={isPending}
               onClick={() => handleSave()}
-              className="w-full py-2.5 bg-[#064E3B] text-white font-bold cursor-pointer"
+              className="w-full min-h-[44px] py-2.5 bg-[#064E3B] hover:bg-emerald-950 text-white font-bold inline-flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-60 cursor-pointer"
             >
-              Confirm Schedule & Save to magazine_posts
+              {isPending ? (
+                <>
+                  <InlineSpinner className="w-4 h-4" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                "Confirm Schedule & Save to magazine_posts"
+              )}
             </button>
           </div>
         </div>
