@@ -184,84 +184,122 @@ export default function Header({
       dir={isUr ? "rtl" : "ltr"}
       className={`no-print ${isUr ? "font-urdu" : "font-ui-sans"}`}
     >
-      {/* CALM, MINIMALIST EDITORIAL HEADER */}
-      <header className="border-b border-[#E6E4DD] bg-[#FAF9F5]">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-6 px-6 py-6">
-          {/* Zone 1: Editorial Wordmark */}
-          <Link
-            href={isUr ? "/urdu" : "/"}
-            className={`text-xl sm:text-2xl font-bold tracking-tight text-[#141413] whitespace-nowrap shrink-0 ${
-              isUr ? "font-urdu" : "font-legal-serif"
-            }`}
-          >
-            {isUr
-              ? siteSettings?.masthead_title_urdu || "دی ڈیلی لیگل بریف"
-              : siteSettings?.masthead_title || "The Daily Legal Brief"}
-          </Link>
+      {/* NEW YORK TIMES CENTERED EDITORIAL MASTHEAD */}
+      <header className="border-b border-[#E5E2D9] bg-[#FAF9F5]">
+        <div className="w-[96%] max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 pt-4 pb-5">
+          {/* Top Utility Whisper Row */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-[#E5E2D9] font-ui-sans text-xs">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Search statutes, judgments, and advocates"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[#E5E2D9] bg-[#F2EFE9]/70 text-[#141413] hover:border-[#141413] cursor-pointer"
+                title="Search (⌘K)"
+              >
+                <Search className="w-3.5 h-3.5 text-[#0B5D3B]" />
+                <span>{isUr ? "تلاش" : "Search"}</span>
+              </button>
+              <Link
+                href="/"
+                className="editorial-link text-[#66645E] hover:text-[#141413]"
+              >
+                {isUr ? "مرکزی صفحہ" : "← Home Edition"}
+              </Link>
+            </div>
 
-          {/* Zone 2: Quiet Text Navigation Links with Gliding Ink Underlines */}
-          <nav className="hidden md:flex items-center gap-7 font-ui-sans text-sm text-[#575652]">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setWorkspaceDrawerOpen(!workspaceDrawerOpen)}
+                className="editorial-link text-xs font-medium text-[#66645E] hover:text-[#141413] cursor-pointer"
+              >
+                {session ? session.name.split(" ")[0] : isUr ? "پورٹل" : "Portals"}
+              </button>
+
+              <Link
+                href={isUr ? "/" : "/urdu"}
+                className="px-2.5 py-1 rounded border border-[#E5E2D9] bg-[#F2EFE9]/70 text-[#141413] text-[11px] font-medium"
+              >
+                {isUr ? "EN" : "اردو"}
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => handleTriggerAI("assistant")}
+                className="px-3.5 py-1.5 rounded-md text-xs font-medium text-[#FAF9F5] bg-[#0B5D3B] hover:bg-[#09482E] whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                {isUr ? "قانونی معاون" : "Ask Legal AI"}
+              </button>
+            </div>
+          </div>
+
+          {/* Centered Monumental NYT Masthead */}
+          <div className="pt-6 pb-4 flex flex-col items-center text-center">
+            <div className="flex flex-col items-center text-center font-mono-code text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-[#66645E] leading-relaxed">
+              <span>EST. UNDER ARTICLE 10-A &amp; 199</span>
+              <span className="text-[#0B5D3B] text-xs my-0.5 leading-none" aria-hidden="true">
+                ✦
+              </span>
+              <span>SOVEREIGN CITIZEN JUSTICE RECORD</span>
+            </div>
+
             <Link
               href={isUr ? "/urdu" : "/"}
-              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
+              className="group mt-2 flex flex-col items-center text-center"
             >
-              {isUr ? "اداریہ" : "Essays"}
+              <span className="font-legal-serif text-3xl sm:text-5xl font-bold tracking-[-0.03em] text-[#141413] group-hover:text-[#0B5D3B] transition-editorial">
+                QanoonPK
+              </span>
+              <span dir="rtl" className="font-urdu text-2xl sm:text-3xl text-[#0B5D3B] mt-1">
+                قانون پاکستان
+              </span>
             </Link>
-            <Link
-              href={isUr ? "/urdu/laws" : "/laws"}
-              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
-            >
-              {isUr ? "قوانین" : "Statutes"}
-            </Link>
-            <Link
-              href={isUr ? "/urdu/lawyers" : "/lawyers"}
-              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
-            >
-              {isUr ? "وکلاء" : "Advocates"}
-            </Link>
-            <Link
-              href={isUr ? "/urdu#templates-qa" : "/#templates-qa"}
-              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
-            >
-              {isUr ? "مسودات و فورم" : "Library & Forum"}
-            </Link>
-            <Link
-              href={isUr ? "/" : "/urdu"}
-              className={`editorial-link hover:text-[#141413] whitespace-nowrap shrink-0 ${
-                isUr ? "font-ui-sans text-xs font-medium" : "font-urdu text-base"
-              }`}
-            >
-              {isUr ? "English" : "اردو"}
-            </Link>
-          </nav>
 
-          {/* Zone 3: Quiet Search, Workspace Drawer Toggle & Single Whisper-Quiet Emerald CTA */}
-          <div className="flex items-center gap-4 shrink-0 font-ui-sans">
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Search statutes, judgments, and advocates"
-              className="p-2 text-[#575652] hover:text-[#141413] cursor-pointer"
-              title="Search (⌘K)"
-            >
-              <Search className="w-4 h-4" />
-            </button>
+            <p className="mt-3 max-w-2xl mx-auto font-legal-serif italic text-xs sm:text-sm text-[#66645E] leading-relaxed">
+              “Plain-Language Pakistani Statutes, Constitutional Remedies &amp; Verified Bar Counsel — Without the Jargon.”
+            </p>
+          </div>
+        </div>
 
-            <button
-              type="button"
-              onClick={() => setWorkspaceDrawerOpen(!workspaceDrawerOpen)}
-              className="editorial-link text-xs font-medium text-[#575652] hover:text-[#141413] cursor-pointer hidden sm:inline-block"
-            >
-              {session ? session.name.split(" ")[0] : isUr ? "پورٹل" : "Portals"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTriggerAI("assistant")}
-              className="px-4 py-2 text-xs font-medium text-white bg-[#0B5D3B] hover:bg-[#09482E] whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              {isUr ? "قانونی معاون" : "Consult Legal AI"}
-            </button>
+        {/* Double-Rule Menu Bar */}
+        <div className="border-t-2 border-t-[#141413]">
+          <div className="border-t border-[#E5E2D9] mt-[2px] w-[96%] max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8">
+            <nav className="flex items-center justify-start md:justify-center gap-6 py-2.5 overflow-x-auto no-scrollbar font-ui-sans text-xs sm:text-[13px] font-medium text-[#141413]">
+              <Link href="/" className="editorial-link whitespace-nowrap shrink-0">
+                {isUr ? "مرکزی صفحہ" : "Home Desk"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link
+                href={isUr ? "/urdu/laws" : "/laws"}
+                className="editorial-link whitespace-nowrap shrink-0"
+              >
+                {isUr ? "آئین و قوانین" : "Constitution & Laws"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link
+                href={isUr ? "/urdu/lawyers" : "/lawyers"}
+                className="editorial-link whitespace-nowrap shrink-0"
+              >
+                {isUr ? "تصدیق شدہ وکلاء" : "Verified Advocates"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link href="/templates" className="editorial-link whitespace-nowrap shrink-0">
+                {isUr ? "قانونی مسودات" : "Legal Templates"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link href="/forum" className="editorial-link whitespace-nowrap shrink-0">
+                {isUr ? "قانونی فورم" : "Citizen Forum"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link href="/pro-bono/apply" className="editorial-link whitespace-nowrap shrink-0">
+                {isUr ? "مفت قانونی امداد" : "Free Legal Aid"}
+              </Link>
+              <span className="text-[#E5E2D9]" aria-hidden="true">·</span>
+              <Link href="/lawyer/dashboard" className="editorial-link whitespace-nowrap shrink-0">
+                {isUr ? "وکیل چیمبر" : "Advocate CRM"}
+              </Link>
+            </nav>
           </div>
         </div>
 

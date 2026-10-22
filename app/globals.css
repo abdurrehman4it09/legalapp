@@ -186,3 +186,113 @@ body {
     display: block !important;
   }
 }
+
+/* =====================================================================
+   2026 THEME ENGINE: OLED SOVEREIGN DARK MODE & NEO-BRUTALIST CONTRAST
+   ===================================================================== */
+[data-theme="dark"] {
+  background-color: #0B0E0D !important;
+  color: #F4F3EE !important;
+}
+
+[data-theme="dark"] .bg-\[\#FAF9F5\],
+[data-theme="dark"] .bg-\[\#FAF9F5\]\/95 {
+  background-color: #0B0E0D !important;
+}
+
+[data-theme="dark"] .bg-\[\#F2EFE9\],
+[data-theme="dark"] .bg-\[\#F2EFE9\]\/70,
+[data-theme="dark"] .bg-\[\#F2EFE9\]\/80 {
+  background-color: #131917 !important;
+}
+
+[data-theme="dark"] .text-\[\#141413\],
+[data-theme="dark"] .text-\[\#141413\]\/90 {
+  color: #F4F3EE !important;
+}
+
+[data-theme="dark"] .text-\[\#66645E\] {
+  color: #A5A39B !important;
+}
+
+[data-theme="dark"] .text-\[\#0B5D3B\] {
+  color: #34D399 !important;
+}
+
+[data-theme="dark"] .border-\[\#E5E2D9\] {
+  border-color: #232B28 !important;
+}
+
+[data-theme="dark"] .border-t-\[\#141413\],
+[data-theme="dark"] .border-\[\#141413\] {
+  border-color: #F4F3EE !important;
+}
+
+[data-theme="dark"] .editorial-card {
+  background-color: #101513 !important;
+  border-color: #232B28 !important;
+}
+
+[data-theme="dark"] .editorial-card:hover {
+  border-color: #34D399 !important;
+}
+
+/* Neo-Brutalist High-Contrast Mode (Trend 3, 4 & 12) */
+[data-theme="brutalist"] .editorial-card,
+[data-theme="brutalist"] .rounded-2xl {
+  border-width: 2px !important;
+  border-color: #141413 !important;
+  box-shadow: 4px 4px 0px #141413 !important;
+}
+
+/* Sustainable & Accessible Reduced Motion Override (Trend 13) */
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] *::before,
+[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* =====================================================================
+   PAFFI / FIGMA RIFF KINETIC LETTERING & ARCTURIS / CTRL WALLET PHYSICS
+   ===================================================================== */
+.kinetic-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.kinetic-btn-label {
+  display: inline-block;
+  transition: transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kinetic-btn:hover .kinetic-btn-label {
+  transform: translate3d(0, -2px, 0) skewX(-3deg);
+}
+
+/* Arcturis Precision Dot-Matrix Canvas */
+.arcturis-dot-matrix {
+  background-image: radial-gradient(rgba(20, 20, 19, 0.14) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+[data-theme="dark"] .arcturis-dot-matrix {
+  background-image: radial-gradient(rgba(244, 243, 238, 0.12) 1px, transparent 1px);
+}
+
+/* Ctrl.xyz / Jeton Tactile Bento Cell */
+.bento-cell {
+  position: relative;
+  overflow: hidden;
+  transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 500ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bento-cell:hover {
+  transform: translate3d(0, -3px, 0);
+  border-color: #0B5D3B;
+  box-shadow: 0 18px 40px -18px rgba(11, 93, 59, 0.16);
+}
+
+
