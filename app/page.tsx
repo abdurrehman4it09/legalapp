@@ -11,8 +11,8 @@ export default function Page() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#FBF9F5] p-10 text-center text-xs text-stone-500">
-          Loading...
+        <div className="min-h-screen bg-[#FAF9F5] p-12 text-center font-mono-code text-xs text-[#66645E]">
+          Loading QanoonPK Citizen Justice Archive...
         </div>
       }
     >

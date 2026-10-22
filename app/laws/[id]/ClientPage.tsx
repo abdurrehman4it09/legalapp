@@ -17,7 +17,6 @@ import {
   Moon,
   Sparkles,
   Scale,
-  Users,
 } from "lucide-react";
 
 const supabase = createClient(
@@ -65,7 +64,7 @@ function EnglishLawContent() {
     if (typeof window === "undefined" || isPrinting) return;
     setIsPrinting(true);
     setFeedback(
-      `Formatting "${law?.title || "Statute"}" for clean printing (headers & footers hidden)...`
+      `Formatting "${law?.title || "Statute"}" for clean printing (headers & footers hidden)…`
     );
     setTimeout(() => {
       window.print();
@@ -75,22 +74,19 @@ function EnglishLawContent() {
 
   if (loading) {
     return (
-      <div className="py-20 text-center font-ui text-sm text-gray-500">
-        Loading statutory text...
+      <div className="py-24 text-center font-ui-sans text-sm text-[#57554F]">
+        Loading statutory text…
       </div>
     );
   }
 
   if (!law) {
     return (
-      <div className="text-center py-20 font-ui">
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">
+      <div className="text-center py-24 font-ui-sans">
+        <h2 className="font-legal-serif text-2xl font-bold text-[#141413] mb-3">
           Statute not found
         </h2>
-        <Link
-          href="/laws"
-          className="min-h-[44px] inline-flex items-center px-4 py-2 text-emerald-800 underline hover:bg-emerald-50 transition-all duration-200 active:scale-[0.98]"
-        >
+        <Link href="/laws" className="editorial-link text-sm text-[#141413]">
           Return to Digital Law Library
         </Link>
       </div>
@@ -99,13 +95,13 @@ function EnglishLawContent() {
 
   const contrastClasses =
     contrastMode === "dark"
-      ? "bg-gray-900 text-gray-100 border-gray-700"
+      ? "bg-[#141413] text-[#FAF9F5] border-[#2C2B29]"
       : contrastMode === "sepia"
-      ? "bg-[#FDF8EE] text-stone-900 border-amber-200"
-      : "bg-white text-gray-900 border-gray-200";
+      ? "bg-[#F2EFE9] text-[#141413] border-[#E6E4DD]"
+      : "bg-[#FAF9F5] text-[#141413] border-[#E6E4DD]";
 
   return (
-    <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-10 flex-grow print-container">
+    <main className="max-w-4xl mx-auto w-full px-6 py-16 sm:py-24 flex-grow print-container">
       {/* Print-Only Official Gazette Statutory Header */}
       <div className="print-only border-b-2 border-black pb-4 mb-6">
         <div className="text-[10pt] uppercase tracking-widest font-mono-code">
@@ -119,235 +115,211 @@ function EnglishLawContent() {
         </div>
       </div>
 
-      {/* Top Action Toolbar (Hidden when printing via .no-print) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-gray-200 font-ui text-xs no-print">
-        <Link
-          href="/laws"
-          className="min-h-[44px] px-3 py-2 text-gray-700 hover:text-emerald-800 hover:bg-emerald-50 font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98]"
-        >
-          <ArrowLeft className="w-4 h-4 shrink-0" />
-          <span>Back to Digital Law Library (Screen 11)</span>
-        </Link>
-
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="max-w-2xl mx-auto">
+        {/* Top Action Toolbar (Hidden when printing via .no-print) */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b border-[#E6E4DD] text-xs no-print">
           <Link
-            href={`/urdu/laws/${law.id}`}
-            className="min-h-[44px] px-3.5 py-2 border border-gray-200 bg-white hover:border-emerald-800 hover:bg-emerald-50 font-urdu text-xs inline-flex items-center justify-center transition-all duration-200 active:scale-[0.98]"
+            href="/laws"
+            className="editorial-link text-[#141413] font-medium inline-flex items-center gap-1.5"
           >
-            اردو متن پڑھیں
+            <ArrowLeft className="w-4 h-4 shrink-0" />
+            <span>All Statutes</span>
           </Link>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !bookmarked;
-              setBookmarked(next);
-              setFeedback(
-                next
-                  ? "Statute bookmarked to your reading dossier."
-                  : "Statute removed from bookmarks."
-              );
-            }}
-            className={`min-h-[44px] px-3.5 py-2 border text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer ${
-              bookmarked
-                ? "bg-emerald-800 text-white border-emerald-800"
-                : "bg-white text-gray-800 border-gray-200 hover:bg-emerald-50 hover:border-emerald-800"
-            }`}
-          >
-            <Bookmark className="w-3.5 h-3.5 shrink-0" />
-            <span>{bookmarked ? "Bookmarked" : "Bookmark Statute"}</span>
-          </button>
-          <button
-            type="button"
-            onClick={handlePrintStatute}
-            disabled={isPrinting}
-            aria-label="Print statute or save as PDF"
-            className="min-h-[44px] px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer disabled:opacity-60"
-          >
-            <Printer className="w-3.5 h-3.5 shrink-0" />
-            <span>
-              {isPrinting ? "Preparing Print..." : "Print Statute / PDF"}
-            </span>
-          </button>
-        </div>
-      </div>
 
-      {/* WCAG Legal Reader Toolbar */}
-      <div className="no-print mb-6 p-3.5 bg-gray-50 border border-gray-200 flex flex-wrap items-center justify-between gap-3 font-ui text-xs">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-gray-700 uppercase tracking-wider text-[11px] mr-1">
-            WCAG Reader Toolbar:
-          </span>
-          <button
-            type="button"
-            onClick={() => setReaderMode("bare_act")}
-            className={`min-h-[44px] px-3.5 py-2 border font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer ${
-              readerMode === "bare_act"
-                ? "bg-emerald-800 text-white border-emerald-800"
-                : "bg-white text-gray-800 border-gray-200 hover:border-emerald-800"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Official Bare Act</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setReaderMode("simple_summary")}
-            className={`min-h-[44px] px-3.5 py-2 border font-semibold inline-flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer ${
-              readerMode === "simple_summary"
-                ? "bg-emerald-800 text-white border-emerald-800"
-                : "bg-white text-gray-800 border-gray-200 hover:border-emerald-800"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Simple Bilingual Summary</span>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center border border-gray-200 bg-white">
-            <button
-              type="button"
-              aria-label="Decrease font size"
-              onClick={() => setFontScale((s) => Math.max(85, s - 10))}
-              className="min-h-[44px] px-3 py-1.5 font-bold text-gray-800 hover:bg-gray-100 transition-all duration-200 active:scale-[0.98] cursor-pointer border-r border-gray-200"
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={`/urdu/laws/${law.id}`}
+              className="px-3.5 py-2 border border-[#E6E4DD] bg-[#F2EFE9] hover:border-[#141413] font-urdu text-xs inline-flex items-center justify-center transition-colors duration-500"
             >
-              A-
-            </button>
-            <span className="px-2.5 text-[11px] font-mono-code text-gray-600">
-              {fontScale}%
-            </span>
+              اردو متن پڑھیں
+            </Link>
             <button
               type="button"
-              aria-label="Increase font size"
-              onClick={() => setFontScale((s) => Math.min(140, s + 10))}
-              className="min-h-[44px] px-3 py-1.5 font-bold text-gray-800 hover:bg-gray-100 transition-all duration-200 active:scale-[0.98] cursor-pointer border-l border-gray-200"
-            >
-              A+
-            </button>
-          </div>
-
-          <div className="inline-flex items-center border border-gray-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setContrastMode("light")}
-              className={`min-h-[44px] px-3 py-1.5 font-semibold inline-flex items-center gap-1 transition-all duration-200 cursor-pointer ${
-                contrastMode === "light"
-                  ? "bg-emerald-800 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
+              onClick={() => {
+                const next = !bookmarked;
+                setBookmarked(next);
+                setFeedback(
+                  next
+                    ? "Statute bookmarked to your reading dossier."
+                    : "Statute removed from bookmarks."
+                );
+              }}
+              className={`px-3.5 py-2 border text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-500 cursor-pointer ${
+                bookmarked
+                  ? "bg-[#141413] text-[#FAF9F5] border-[#141413]"
+                  : "bg-[#FAF9F5] text-[#141413] border-[#E6E4DD] hover:border-[#141413]"
               }`}
             >
-              <Sun className="w-3.5 h-3.5" />
-              <span>Light</span>
+              <Bookmark className="w-3.5 h-3.5 shrink-0" />
+              <span>{bookmarked ? "Saved" : "Save"}</span>
             </button>
             <button
               type="button"
-              onClick={() => setContrastMode("sepia")}
-              className={`min-h-[44px] px-3 py-1.5 font-semibold inline-flex items-center gap-1 border-x border-gray-200 transition-all duration-200 cursor-pointer ${
-                contrastMode === "sepia"
-                  ? "bg-amber-800 text-white"
-                  : "text-gray-700 hover:bg-amber-50"
-              }`}
+              onClick={handlePrintStatute}
+              disabled={isPrinting}
+              aria-label="Print statute or save as PDF"
+              className="px-4 py-2 bg-[#0B5D3B] hover:bg-[#09482E] text-[#FAF9F5] text-xs font-medium inline-flex items-center gap-1.5 transition-colors duration-500 cursor-pointer disabled:opacity-60"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Sepia</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setContrastMode("dark")}
-              className={`min-h-[44px] px-3 py-1.5 font-semibold inline-flex items-center gap-1 transition-all duration-200 cursor-pointer ${
-                contrastMode === "dark"
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <Moon className="w-3.5 h-3.5" />
-              <span>Dark</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span>{isPrinting ? "Preparing…" : "Print / PDF"}</span>
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Immediate Visual Feedback Banner (Hidden in Print) */}
-      {feedback && (
-        <div
-          role="status"
-          className="no-print mb-6 p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs font-ui font-medium flex items-center justify-between gap-3"
+        {/* Calm Reader Controls */}
+        <div className="no-print mb-10 p-4 bg-[#F2EFE9] border border-[#E6E4DD] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setReaderMode("bare_act")}
+              className={`px-3.5 py-2 border font-medium inline-flex items-center gap-1.5 transition-colors duration-500 cursor-pointer ${
+                readerMode === "bare_act"
+                  ? "bg-[#0B5D3B] text-[#FAF9F5] border-[#0B5D3B]"
+                  : "bg-[#FAF9F5] text-[#141413] border-[#E6E4DD]"
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Official Bare Act</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReaderMode("simple_summary")}
+              className={`px-3.5 py-2 border font-medium inline-flex items-center gap-1.5 transition-colors duration-500 cursor-pointer ${
+                readerMode === "simple_summary"
+                  ? "bg-[#0B5D3B] text-[#FAF9F5] border-[#0B5D3B]"
+                  : "bg-[#FAF9F5] text-[#141413] border-[#E6E4DD]"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Simple Bilingual Summary</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center border border-[#E6E4DD] bg-[#FAF9F5]">
+              <button
+                type="button"
+                aria-label="Decrease font size"
+                onClick={() => setFontScale((s) => Math.max(85, s - 10))}
+                className="px-2.5 py-1.5 font-medium text-[#141413] cursor-pointer border-r border-[#E6E4DD]"
+              >
+                A-
+              </button>
+              <span className="px-2 text-[11px] text-[#57554F]">
+                {fontScale}%
+              </span>
+              <button
+                type="button"
+                aria-label="Increase font size"
+                onClick={() => setFontScale((s) => Math.min(140, s + 10))}
+                className="px-2.5 py-1.5 font-medium text-[#141413] cursor-pointer border-l border-[#E6E4DD]"
+              >
+                A+
+              </button>
+            </div>
+
+            <div className="inline-flex items-center border border-[#E6E4DD] bg-[#FAF9F5]">
+              <button
+                type="button"
+                onClick={() => setContrastMode("light")}
+                className={`px-2.5 py-1.5 cursor-pointer ${
+                  contrastMode === "light"
+                    ? "bg-[#141413] text-[#FAF9F5]"
+                    : "text-[#57554F]"
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setContrastMode("sepia")}
+                className={`px-2.5 py-1.5 border-x border-[#E6E4DD] cursor-pointer ${
+                  contrastMode === "sepia"
+                    ? "bg-[#141413] text-[#FAF9F5]"
+                    : "text-[#57554F]"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setContrastMode("dark")}
+                className={`px-2.5 py-1.5 cursor-pointer ${
+                  contrastMode === "dark"
+                    ? "bg-[#141413] text-[#FAF9F5]"
+                    : "text-[#57554F]"
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {feedback && (
+          <div
+            role="status"
+            className="no-print mb-8 p-4 bg-[#F2EFE9] border border-[#E6E4DD] text-[#141413] text-xs flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[#0B5D3B] shrink-0" />
+              <span>{feedback}</span>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={() => setFeedback(null)}
+              className="text-[#57554F] hover:text-[#141413] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Single Centered 680px Reading Column */}
+        <article
+          className={`border p-8 sm:p-12 print-document transition-colors duration-500 ${contrastClasses}`}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <CheckCircle2 className="w-4 h-4 text-emerald-800 shrink-0" />
-            <span className="break-words">{feedback}</span>
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss notification"
-            onClick={() => setFeedback(null)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors duration-200 cursor-pointer shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Screen 12: Asymmetric Reading Canvas with Marginal Notes (70% / 30%) */}
-      <div
-        className={`grid grid-cols-1 lg:grid-cols-12 gap-8 border p-6 sm:p-12 print-document transition-colors duration-200 ${contrastClasses}`}
-      >
-        <div className="lg:col-span-8 lg:border-r lg:border-gray-200 lg:pr-8">
-          <div className="font-ui text-xs opacity-75 mb-3 flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-emerald-800">
-              SCREEN 12 · STATUTE READER
-            </span>
-            <span>·</span>
-            <span>{law.category || "Codified Act"}</span>
-            <span>·</span>
-            <span className="font-mono-code">
-              {law.section_number || "Pakistan Code"}
-            </span>
-            {law.promulgation_year && (
-              <>
-                <span>·</span>
-                <span>Act of {law.promulgation_year}</span>
-              </>
-            )}
+          <div className="text-xs uppercase tracking-[0.14em] opacity-70 mb-4">
+            {law.category || "Codified Act"} ·{" "}
+            {law.section_number || "Pakistan Code"}
+            {law.promulgation_year ? ` · Act of ${law.promulgation_year}` : ""}
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-bold leading-tight pb-6 border-b border-gray-200 mb-6 break-words">
+          <h1 className="font-legal-serif text-3xl sm:text-4xl font-bold leading-[1.22] pb-6 border-b border-[#E6E4DD] mb-8">
             {law.title}
           </h1>
 
-          {/* Statutory Procedural Quick Badges */}
-          <div className="flex flex-wrap items-center gap-2 mb-6 font-ui text-xs">
-            <span
-              className={`px-2.5 py-1 border font-semibold ${
-                law.is_bailable
-                  ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-                  : "bg-amber-50 text-amber-900 border-amber-200"
-              }`}
-            >
-              {law.is_bailable ? "Bailable / Civil" : "Non-Bailable / Strict"}
+          {/* Calm Procedural Metadata Line */}
+          <div className="flex flex-wrap items-center gap-4 mb-8 text-xs opacity-80">
+            <span>
+              Status:{" "}
+              <strong>
+                {law.is_bailable ? "Bailable / Civil" : "Non-Bailable / Strict"}
+              </strong>
             </span>
             {law.max_punishment && (
-              <span className="px-2.5 py-1 bg-gray-50 text-gray-800 border border-gray-200">
-                Max Punishment: <strong>{law.max_punishment}</strong>
+              <span>
+                · Max Punishment: <strong>{law.max_punishment}</strong>
               </span>
             )}
             {law.trial_court && (
-              <span className="px-2.5 py-1 bg-gray-50 text-gray-800 border border-gray-200">
-                Trial Court: <strong>{law.trial_court}</strong>
+              <span>
+                · Forum: <strong>{law.trial_court}</strong>
               </span>
             )}
           </div>
 
           {readerMode === "simple_summary" ? (
             <div
-              className="space-y-6 p-5 bg-emerald-50/60 border border-emerald-200 text-gray-900"
+              className="space-y-8 p-6 bg-[#F2EFE9] border border-[#E6E4DD] text-[#141413]"
               style={{ fontSize: `${fontScale}%` }}
             >
               <div>
-                <div className="text-xs font-ui font-bold uppercase tracking-wider text-emerald-800 mb-2">
+                <div className="text-xs uppercase tracking-[0.14em] text-[#57554F] mb-2">
                   Plain Citizen Summary (English)
                 </div>
-                <p className="leading-[1.85] whitespace-pre-wrap break-words">
+                <p className="leading-[1.85] whitespace-pre-wrap">
                   {law.plain_summary_en ||
                     law.marginal_notes ||
                     law.content ||
@@ -357,12 +329,12 @@ function EnglishLawContent() {
               {(law.plain_summary_ur || law.content_urdu) && (
                 <div
                   dir="rtl"
-                  className="pt-5 border-t border-emerald-200 font-urdu"
+                  className="pt-6 border-t border-[#E6E4DD] font-urdu"
                 >
-                  <div className="text-xs font-ui font-bold text-emerald-800 mb-2">
-                    آسان عوامی خلاصہ (Urdu Citizen Summary)
+                  <div className="text-sm text-[#57554F] mb-2">
+                    آسان عوامی خلاصہ
                   </div>
-                  <p className="text-xl leading-[2.4] whitespace-pre-wrap break-words">
+                  <p className="text-xl whitespace-pre-wrap">
                     {law.plain_summary_ur || law.content_urdu}
                   </p>
                 </div>
@@ -370,115 +342,67 @@ function EnglishLawContent() {
             </div>
           ) : (
             <div style={{ fontSize: `${fontScale}%` }}>
-              <div className="leading-[1.85] whitespace-pre-wrap break-words">
+              <div className="text-base sm:text-lg leading-[1.85] whitespace-pre-wrap">
                 {law.content || law.description}
               </div>
 
               {law.content_urdu && (
-                <div className="mt-10 pt-8 border-t border-gray-200" dir="rtl">
-                  <div className="font-ui text-xs text-emerald-800 font-semibold mb-3">
-                    مستند اردو متن (Codified Urdu Text)
+                <div
+                  className="mt-12 pt-10 border-t border-[#E6E4DD]"
+                  dir="rtl"
+                >
+                  <div className="text-sm text-[#57554F] mb-3 font-urdu">
+                    مستند اردو متن
                   </div>
-                  <h2 className="font-urdu text-2xl font-bold mb-4 leading-loose break-words">
+                  <h2 className="font-urdu text-2xl font-bold mb-4">
                     {law.title_urdu}
                   </h2>
-                  <div className="font-urdu text-xl leading-[2.4] whitespace-pre-wrap break-words">
+                  <div className="font-urdu text-xl whitespace-pre-wrap">
                     {law.content_urdu}
                   </div>
                 </div>
               )}
             </div>
           )}
-        </div>
 
-        {/* Right 30% Column: Marginal Notes & Judicial Citations */}
-        <aside className="lg:col-span-4 space-y-6 font-ui">
-          <div className="p-5 bg-gray-50 border border-gray-200 space-y-3 text-gray-900">
-            <div className="text-xs uppercase tracking-widest text-emerald-800 font-semibold">
-              Plain Summary &amp; Marginal Notes
+          {/* Marginal Commentary Footnote inside the single column */}
+          <div className="mt-12 pt-8 border-t border-[#E6E4DD] space-y-3 text-sm opacity-85">
+            <div className="text-xs uppercase tracking-[0.14em] font-semibold">
+              Editorial Commentary &amp; Application
             </div>
-            <p className="text-xs text-gray-700 leading-relaxed break-words">
+            <p className="leading-[1.75]">
               {law.plain_summary_en ||
                 law.marginal_notes ||
                 "Applicable across all High Courts and subordinate civil/criminal courts in Pakistan. Read alongside Article 10A constitutional due process guarantees."}
             </p>
-            {(law.plain_summary_ur || law.marginal_notes_urdu) && (
-              <p
-                className="font-urdu text-sm text-gray-800 leading-loose pt-3 border-t border-gray-200 break-words"
-                dir="rtl"
-              >
-                {law.plain_summary_ur || law.marginal_notes_urdu}
-              </p>
-            )}
           </div>
+        </article>
 
-          <div className="p-5 bg-gray-50 border border-gray-200 space-y-2 text-xs text-gray-900">
-            <div className="uppercase tracking-widest text-gray-500 font-semibold">
-              Accession &amp; Citation Metadata
+        {/* Bottom Call-to-Action Banner */}
+        <div className="no-print mt-12 p-8 bg-[#F2EFE9] border border-[#E6E4DD] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="font-legal-serif text-lg font-bold text-[#141413]">
+              Need Legal Representation on This Statute?
             </div>
-            <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-500">Trial Court:</span>
-              <span className="font-semibold text-gray-900">
-                {law.trial_court || "Sessions / High Court"}
-              </span>
-            </div>
-            <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-500">Classification:</span>
-              <span className="font-mono-code text-emerald-800">
-                {law.category}
-              </span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-gray-500">Promulgation:</span>
-              <span className="font-semibold text-emerald-800">
-                {law.promulgation_year || "In Force"}
-              </span>
-            </div>
+            <p className="text-xs text-[#57554F] mt-1">
+              Consult a verified High Court or Supreme Court advocate regarding{" "}
+              {law.section_number || law.title}.
+            </p>
           </div>
-
           <Link
             href="/lawyers"
-            className="no-print w-full min-h-[44px] py-3 px-4 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
+            className="px-5 py-3 bg-[#0B5D3B] hover:bg-[#09482E] text-[#FAF9F5] text-xs font-medium inline-flex items-center gap-2 transition-colors duration-500 shrink-0"
           >
-            <Users className="w-4 h-4" />
-            <span>Book a Verified Lawyer for This Issue</span>
+            <Scale className="w-4 h-4" />
+            <span>Consult Verified Advocate →</span>
           </Link>
-
-          <button
-            type="button"
-            onClick={handlePrintStatute}
-            className="no-print w-full min-h-[44px] py-2.5 bg-white border border-gray-300 hover:border-emerald-800 text-gray-900 text-xs font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] cursor-pointer"
-          >
-            <Printer className="w-3.5 h-3.5 text-emerald-800" />
-            <span>Print Clean Court Copy</span>
-          </button>
-        </aside>
-      </div>
-
-      {/* Bottom Call-to-Action Banner */}
-      <div className="no-print mt-8 p-6 bg-gray-50 border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 font-ui">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-            Verified Legal Representation
-          </div>
-          <p className="text-sm text-gray-700 mt-1">
-            Need formal legal representation or bail assistance under{" "}
-            <strong>{law.section_number || law.title}</strong>?
-          </p>
         </div>
-        <Link
-          href="/lawyers"
-          className="min-h-[44px] px-5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold inline-flex items-center gap-2 transition-all duration-200 active:scale-[0.98] shrink-0"
-        >
-          <Scale className="w-4 h-4" />
-          <span>Book a Verified Lawyer for This Issue →</span>
-        </Link>
-      </div>
 
-      {/* Print-Only Statutory Attestation Footer */}
-      <div className="print-only mt-8 pt-4 border-t border-black text-[9.5pt] font-mono-code">
-        Certified Statutory Extract · {law.title} ({law.section_number || "PK"})
-        · Printed via The Daily Legal Brief Digital Law Library.
+        {/* Print-Only Statutory Attestation Footer */}
+        <div className="print-only mt-8 pt-4 border-t border-black text-[9.5pt] font-mono-code">
+          Certified Statutory Extract · {law.title} (
+          {law.section_number || "PK"}) · Printed via The Daily Legal Brief.
+        </div>
       </div>
     </main>
   );
@@ -486,12 +410,12 @@ function EnglishLawContent() {
 
 export default function FullLawPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-white text-gray-900 font-legal">
+    <div className="min-h-screen flex flex-col bg-[#FAF9F5] text-[#141413] font-ui-sans">
       <Header lang="en" />
       <Suspense
         fallback={
-          <div className="py-20 text-center font-ui text-sm text-gray-500 flex-grow">
-            Loading legal text...
+          <div className="py-24 text-center text-sm text-[#57554F] flex-grow">
+            Loading legal text…
           </div>
         }
       >

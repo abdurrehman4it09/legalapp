@@ -52,6 +52,7 @@ export default function Header({
   const [aiMode, setAiMode] = useState<"assistant" | "researcher">("assistant");
   const [splashOpen, setSplashOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
+  const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
 
   // Screens 57, 58, 59, 60, 61 modals/sheets
   const [notifOpen, setNotifOpen] = useState(false);
@@ -93,19 +94,23 @@ export default function Header({
     syncData();
 
     if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("plp_theme") as
-        | "paper"
-        | "light"
-        | "dark"
-        | null;
-      if (savedTheme) {
-        setTheme(savedTheme);
-        document.documentElement.classList.remove(
-          "theme-paper",
-          "theme-light",
-          "theme-dark"
-        );
-        document.documentElement.classList.add(`theme-${savedTheme}`);
+      try {
+        const savedTheme = localStorage.getItem("plp_theme") as
+          | "paper"
+          | "light"
+          | "dark"
+          | null;
+        if (savedTheme) {
+          setTheme(savedTheme);
+          document.documentElement.classList.remove(
+            "theme-paper",
+            "theme-light",
+            "theme-dark"
+          );
+          document.documentElement.classList.add(`theme-${savedTheme}`);
+        }
+      } catch {
+        // ignore
       }
       window.addEventListener("plp_data_updated", syncData);
       return () => window.removeEventListener("plp_data_updated", syncData);
@@ -119,6 +124,7 @@ export default function Header({
         setSearchOpen(true);
       }
       if (e.key === "Escape") {
+        setWorkspaceDrawerOpen(false);
         setSplashOpen(false);
         setNotifOpen(false);
         setLangSheetOpen(false);
@@ -135,7 +141,11 @@ export default function Header({
   const applyTheme = (next: "paper" | "light" | "dark") => {
     setTheme(next);
     if (typeof window !== "undefined") {
-      localStorage.setItem("plp_theme", next);
+      try {
+        localStorage.setItem("plp_theme", next);
+      } catch {
+        // ignore
+      }
       document.documentElement.classList.remove(
         "theme-paper",
         "theme-light",
@@ -172,321 +182,202 @@ export default function Header({
   return (
     <div
       dir={isUr ? "rtl" : "ltr"}
-      className={`no-print ${isUr ? "font-urdu" : "font-legal"}`}
+      className={`no-print ${isUr ? "font-urdu" : "font-ui-sans"}`}
     >
-      {/* STRICT 3-ZONE TOP BAR CONTRACT */}
-      <header className="flex items-center justify-between gap-8 px-6 py-4 border-b border-stone-300 bg-[#FBF9F5]">
-        {/* Zone 1: Single text element wordmark */}
-        <Link
-          href={isUr ? "/urdu" : "/"}
-          className="text-xl sm:text-2xl font-bold tracking-tight text-stone-950 whitespace-nowrap shrink-0"
-        >
-          {isUr
-            ? siteSettings?.masthead_title_urdu || "دی ڈیلی لیگل بریف"
-            : siteSettings?.masthead_title || "The Daily Legal Brief"}
-        </Link>
-
-        {/* Zone 2: 5 concise single-line text navigation links */}
-        <nav className="hidden md:flex items-center gap-7 font-ui text-xs sm:text-sm font-medium text-stone-700">
+      {/* CALM, MINIMALIST EDITORIAL HEADER */}
+      <header className="border-b border-[#E6E4DD] bg-[#FAF9F5]">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-6 px-6 py-6">
+          {/* Zone 1: Editorial Wordmark */}
           <Link
             href={isUr ? "/urdu" : "/"}
-            className="hover:text-[#064E3B] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className={`text-xl sm:text-2xl font-bold tracking-tight text-[#141413] whitespace-nowrap shrink-0 ${
+              isUr ? "font-urdu" : "font-legal-serif"
+            }`}
           >
-            {isUr ? "جریدہ" : "Editorial"}
+            {isUr
+              ? siteSettings?.masthead_title_urdu || "دی ڈیلی لیگل بریف"
+              : siteSettings?.masthead_title || "The Daily Legal Brief"}
           </Link>
-          <Link
-            href={isUr ? "/urdu/laws" : "/laws"}
-            className="hover:text-[#064E3B] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            {isUr ? "قانونی لائبریری" : "Statutes"}
-          </Link>
-          <Link
-            href={isUr ? "/urdu/lawyers" : "/lawyers"}
-            className="hover:text-[#064E3B] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            {isUr ? "تصدیق شدہ وکلاء" : "Advocates"}
-          </Link>
-          <Link
-            href={isUr ? "/urdu#templates-qa" : "/#templates-qa"}
-            className="hover:text-[#064E3B] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            {isUr ? "مسودات اور سی آر ایم" : "Templates, Q&A & CRM"}
-          </Link>
-          <Link
-            href="/admin"
-            className="hover:text-[#064E3B] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
-          >
-            {isUr ? "ایڈمن سی ایم ایس" : "Admin CMS"}
-          </Link>
-        </nav>
 
-        {/* Zone 3: 1 primary action */}
-        <div className="flex items-center shrink-0 font-ui">
-          <button
-            type="button"
-            onClick={() => handleTriggerAI("assistant")}
-            className="px-4 py-2 text-xs font-semibold text-white bg-[#064E3B] hover:bg-emerald-950 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            {isUr ? "قانونی AI معاون" : "Consult Legal AI"}
-          </button>
-        </div>
-      </header>
-
-      {/* Operational Utility & 3-Version Workspace Ribbon (Below Header) */}
-      <div className="border-b border-stone-200 bg-white px-6 py-2.5 font-ui text-xs">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          {/* Left: 3 App Versions Switcher + 61-Screen Blueprint Deck */}
-          <div className="flex items-center gap-2 overflow-x-auto">
+          {/* Zone 2: Quiet Text Navigation Links with Gliding Ink Underlines */}
+          <nav className="hidden md:flex items-center gap-7 font-ui-sans text-sm text-[#575652]">
             <Link
-              href="/admin"
-              className="px-2.5 py-1 text-[#064E3B] border border-[#064E3B]/40 bg-emerald-950/5 hover:bg-[#064E3B] hover:text-white font-semibold whitespace-nowrap shrink-0 transition-colors"
+              href={isUr ? "/urdu" : "/"}
+              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
             >
-              1. Admin Supply CMS
+              {isUr ? "اداریہ" : "Essays"}
             </Link>
             <Link
-              href="/"
-              className={`px-2.5 py-1 transition-colors whitespace-nowrap shrink-0 ${
-                !isUr
-                  ? "bg-stone-900 text-white font-semibold"
-                  : "text-stone-700 hover:bg-stone-100 border border-stone-200"
+              href={isUr ? "/urdu/laws" : "/laws"}
+              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
+            >
+              {isUr ? "قوانین" : "Statutes"}
+            </Link>
+            <Link
+              href={isUr ? "/urdu/lawyers" : "/lawyers"}
+              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
+            >
+              {isUr ? "وکلاء" : "Advocates"}
+            </Link>
+            <Link
+              href={isUr ? "/urdu#templates-qa" : "/#templates-qa"}
+              className="editorial-link hover:text-[#141413] whitespace-nowrap shrink-0"
+            >
+              {isUr ? "مسودات و فورم" : "Library & Forum"}
+            </Link>
+            <Link
+              href={isUr ? "/" : "/urdu"}
+              className={`editorial-link hover:text-[#141413] whitespace-nowrap shrink-0 ${
+                isUr ? "font-ui-sans text-xs font-medium" : "font-urdu text-base"
               }`}
             >
-              2. Main App (EN)
+              {isUr ? "English" : "اردو"}
             </Link>
-            <Link
-              href="/urdu"
-              className={`px-2.5 py-1 transition-colors whitespace-nowrap shrink-0 ${
-                isUr
-                  ? "bg-[#064E3B] text-white font-semibold"
-                  : "text-stone-700 hover:bg-stone-100 border border-stone-200"
-              }`}
-            >
-              3. اردو ایپ (UR)
-            </Link>
+          </nav>
 
-            <button
-              type="button"
-              onClick={() => setExplorerOpen(true)}
-              className="px-2.5 py-1 bg-amber-50/80 border border-[#B48327] text-stone-900 hover:bg-[#B48327] hover:text-white font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-            >
-              <Layers className="w-3.5 h-3.5 text-[#064E3B]" />
-              <span>All 61 Screens & Modals</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSplashOpen(true)}
-              className="px-2.5 py-1 text-stone-600 hover:text-stone-900 border border-stone-200 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              01. Splash
-            </button>
-          </div>
-
-          {/* Right: Search (03), Notifications (57), Language Sheet (59), Theme Sheet (60), Auth (13) / Logout (61) */}
-          <div className="flex items-center gap-2">
+          {/* Zone 3: Quiet Search, Workspace Drawer Toggle & Single Whisper-Quiet Emerald CTA */}
+          <div className="flex items-center gap-4 shrink-0 font-ui-sans">
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              aria-label="Search statutes, judgments, and advocates"
+              className="p-2 text-[#575652] hover:text-[#141413] cursor-pointer"
+              title="Search (⌘K)"
             >
-              <Search className="w-3.5 h-3.5 text-[#064E3B]" />
-              <span>{isUr ? "تلاش (03)" : "Search (03 · ⌘K)"}</span>
+              <Search className="w-4 h-4" />
             </button>
 
             <button
               type="button"
-              onClick={() => setNotifOpen(true)}
-              className="px-2.5 py-1 border border-stone-200 hover:bg-stone-100 text-stone-700 flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
-              title="Screen 57 • Notifications Hub"
+              onClick={() => setWorkspaceDrawerOpen(!workspaceDrawerOpen)}
+              className="editorial-link text-xs font-medium text-[#575652] hover:text-[#141413] cursor-pointer hidden sm:inline-block"
             >
-              <Bell className="w-3.5 h-3.5 text-[#064E3B]" />
-              <span>57 ({notifications.length})</span>
+              {session ? session.name.split(" ")[0] : isUr ? "پورٹل" : "Portals"}
             </button>
 
             <button
               type="button"
-              onClick={() => setLangSheetOpen(true)}
-              className="px-2.5 py-1 border border-stone-200 hover:bg-stone-100 text-stone-700 flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
-              title="Screen 59 • Language Selector Sheet"
+              onClick={() => handleTriggerAI("assistant")}
+              className="px-4 py-2 text-xs font-medium text-white bg-[#0B5D3B] hover:bg-[#09482E] whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <Globe className="w-3.5 h-3.5 text-[#064E3B]" />
-              <span>59. EN/UR</span>
+              {isUr ? "قانونی معاون" : "Consult Legal AI"}
             </button>
-
-            <button
-              type="button"
-              onClick={() => setThemeSheetOpen(true)}
-              className="px-2.5 py-1 border border-stone-200 hover:bg-stone-100 text-stone-700 flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
-              title="Screen 60 • Appearance Mode Sheet"
-            >
-              <Sun className="w-3.5 h-3.5 text-[#B48327]" />
-              <span>
-                60.{" "}
-                {theme === "paper"
-                  ? "Paper"
-                  : theme === "light"
-                  ? "Light"
-                  : "Dark"}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRbacModalOpen(true)}
-              className="px-2.5 py-1 border border-[#064E3B]/40 bg-emerald-950/5 hover:bg-[#064E3B] hover:text-white text-[#064E3B] font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-              title="4-Role RBAC Profile Sync (public.users_profiles)"
-            >
-              <span>
-                RBAC:{" "}
-                {session
-                  ? normalizeRBACRole(session.rbacRole || session.role)
-                  : "Guest (M1)"}
-              </span>
-            </button>
-
-            {session ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-stone-800 font-semibold whitespace-nowrap shrink-0">
-                  {session.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLogoutModalOpen(true)}
-                  className="px-2 py-1 border border-red-200 text-red-700 hover:bg-red-50 flex items-center gap-1 cursor-pointer"
-                  title="Screen 61 • Logout Confirmation Modal"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>61</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  handleTriggerAuth(
-                    isUr
-                      ? "اسکرین 13–20 • اپنے کلائنٹ یا ایڈووکیٹ اکاؤنٹ میں سائن ان کریں"
-                      : "Screens 13–20 • Sign in or verify your Client / Advocate credentials"
-                  )
-                }
-                className="px-3 py-1 border border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-white font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                {isUr ? "سائن ان (13–20)" : "Auth (13–20)"}
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Master Database-to-Route Mapping Strip (Modules 1 to 5) */}
-        <div className="max-w-7xl mx-auto pt-2 mt-2 border-t border-stone-200/80 flex items-center gap-2 overflow-x-auto text-[11px]">
-          <button
-            type="button"
-            onClick={() => setSeoModalOpen(true)}
-            className="px-2.5 py-0.5 bg-[#064E3B] text-white hover:bg-emerald-950 font-semibold shrink-0 cursor-pointer"
-          >
-            SEO Metadata (All 61 Routes)
-          </button>
-          <span className="font-mono-code font-bold text-[#064E3B] uppercase tracking-wider shrink-0">
-            DB→Route Map:
-          </span>
-          <Link
-            href="/magazine/1"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M1: /magazine/1
-          </Link>
-          <Link
-            href="/lawyers"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M1: /lawyers
-          </Link>
-          <Link
-            href="/templates"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M1: /templates
-          </Link>
-          <Link
-            href="/forum"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M1: /forum
-          </Link>
-          <Link
-            href="/laws"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M1: /laws
-          </Link>
-          <Link
-            href="/auth/login"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M2: /auth/login
-          </Link>
-          <Link
-            href="/lawyers/1/book"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M3: /lawyers/1/book
-          </Link>
-          <Link
-            href="/client/cases"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M3: /client/cases
-          </Link>
-          <Link
-            href="/client/ai-assistant"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M3: /client/ai-assistant
-          </Link>
-          <Link
-            href="/forum/ask"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M3: /forum/ask
-          </Link>
-          <Link
-            href="/pro-bono/apply"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M3: /pro-bono/apply
-          </Link>
-          <Link
-            href="/lawyer/dashboard"
-            className="px-2 py-0.5 bg-emerald-950/10 hover:bg-emerald-950/20 text-[#064E3B] border border-[#064E3B]/30 font-semibold shrink-0"
-          >
-            M4: /lawyer/dashboard
-          </Link>
-          <Link
-            href="/lawyer/wallet"
-            className="px-2 py-0.5 bg-emerald-950/10 hover:bg-emerald-950/20 text-[#064E3B] border border-[#064E3B]/30 font-semibold shrink-0"
-          >
-            M4: /lawyer/wallet
-          </Link>
-          <Link
-            href="/admin/cms"
-            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-stone-900 border border-[#B48327]/50 font-semibold shrink-0"
-          >
-            M5: /admin/cms
-          </Link>
-          <Link
-            href="/chat/CASE-LHR-2026-09"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M5: /chat/[caseId]
-          </Link>
-          <Link
-            href="/video-call/VIDEO-CHAMBER-7721"
-            className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 shrink-0"
-          >
-            M5: /video-call/[caseId]
-          </Link>
-        </div>
-      </div>
+        {/* Collapsible Quiet Workspace & Portals Drawer (Only visible when explicitly toggled) */}
+        {workspaceDrawerOpen && (
+          <div className="border-t border-[#E6E4DD] bg-[#F2EFE9] px-6 py-6 editorial-fade-up font-ui-sans text-xs">
+            <div className="max-w-4xl mx-auto space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-5 text-[#141413]">
+                  <Link
+                    href={isUr ? "/" : "/urdu"}
+                    onClick={() => setWorkspaceDrawerOpen(false)}
+                    className="editorial-link font-medium"
+                  >
+                    {isUr ? "Switch to English Edition" : "اردو ایڈیشن کھولیں"}
+                  </Link>
+                  <Link
+                    href="/client/ai-assistant"
+                    onClick={() => setWorkspaceDrawerOpen(false)}
+                    className="editorial-link text-[#575652] hover:text-[#141413]"
+                  >
+                    AI Assistant Studio
+                  </Link>
+                  <Link
+                    href="/client/cases"
+                    onClick={() => setWorkspaceDrawerOpen(false)}
+                    className="editorial-link text-[#575652] hover:text-[#141413]"
+                  >
+                    Client Cases
+                  </Link>
+                  <Link
+                    href="/lawyer/dashboard"
+                    onClick={() => setWorkspaceDrawerOpen(false)}
+                    className="editorial-link text-[#575652] hover:text-[#141413]"
+                  >
+                    Advocate Chamber
+                  </Link>
+                  <Link
+                    href="/admin"
+                    onClick={() => setWorkspaceDrawerOpen(false)}
+                    className="editorial-link text-[#575652] hover:text-[#141413]"
+                  >
+                    Editorial CMS
+                  </Link>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceDrawerOpen(false);
+                      setExplorerOpen(true);
+                    }}
+                    className="editorial-link text-[#575652] hover:text-[#141413] cursor-pointer"
+                  >
+                    All 61 Screens
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceDrawerOpen(false);
+                      setNotifOpen(true);
+                    }}
+                    className="editorial-link text-[#575652] hover:text-[#141413] cursor-pointer"
+                  >
+                    Alerts ({notifications.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceDrawerOpen(false);
+                      setThemeSheetOpen(true);
+                    }}
+                    className="editorial-link text-[#575652] hover:text-[#141413] cursor-pointer"
+                  >
+                    Reading Theme ({theme})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceDrawerOpen(false);
+                      setRbacModalOpen(true);
+                    }}
+                    className="editorial-link text-[#575652] hover:text-[#141413] cursor-pointer"
+                  >
+                    Role: {session ? normalizeRBACRole(session.rbacRole || session.role) : "Guest"}
+                  </button>
+                  {session ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceDrawerOpen(false);
+                        setLogoutModalOpen(true);
+                      }}
+                      className="editorial-link text-red-800 cursor-pointer"
+                    >
+                      Sign Out
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkspaceDrawerOpen(false);
+                        handleTriggerAuth("Sign in to your Client or Advocate account");
+                      }}
+                      className="editorial-link font-medium text-[#0B5D3B] cursor-pointer"
+                    >
+                      Sign In
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* Screen 01: Splash Screen Modal Preview */}
       {splashOpen && (
